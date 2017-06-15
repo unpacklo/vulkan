@@ -26,6 +26,8 @@ void VulkanInternalFreeNotify(void* userdata, size_t bytes, VkInternalAllocation
 {
 }
 
+#define VK_CHECK_RET1_ON_FAIL(vk_result)  do { VkResult result = (vk_result); if (result != VK_SUCCESS) { printf("%s:%d got %d!\n", __FILE__, __LINE__, result); getchar(); return 1; } } while(0)
+
 int main()
 {
   VkInstanceCreateInfo info = {};
@@ -39,13 +41,13 @@ int main()
   callbacks.pfnInternalFree = VulkanInternalFreeNotify;
 
   VkInstance instance = {};
-  VkResult result = vkCreateInstance(&info, &callbacks, &instance);
+  VK_CHECK_RET1_ON_FAIL(vkCreateInstance(&info, &callbacks, &instance));
 
-  if (result == VK_SUCCESS)
-  {
-    printf("Hello vulkan!\n");
-  }
+  //const int MAX_PHYSICAL_DEVICES = 8;
+  //VkPhysicalDevice physical_devices[MAX_PHYSICAL_DEVICES] = {};
+  //result = VkEnumeratePhysicalDevices(instance, MAX_PHYSICAL_DEVICES, physical_devices);
 
+  printf("Vulkan succeeded!\n");
   getchar();
 
   return 0;
