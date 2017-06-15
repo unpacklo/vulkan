@@ -26,7 +26,22 @@ void VulkanInternalFreeNotify(void* userdata, size_t bytes, VkInternalAllocation
 {
 }
 
-#define VK_CHECK_RET1_ON_FAIL(vk_result)  do { VkResult result = (vk_result); if (result != VK_SUCCESS) { printf("%s:%d got %d!\n", __FILE__, __LINE__, result); getchar(); return 1; } } while(0)
+#define VK_CHECK(vk_result)  do { VkResult result = (vk_result); if (result != VK_SUCCESS) { printf("%s:%d got %d!\n", __FILE__, __LINE__, result); getchar(); return 1; } } while(0)
+
+static uint32_t VulkanMajorVersion(uint32_t api_version)
+{
+  return api_version >> 22;
+}
+
+static uint32_t VulkanMinorVersion(uint32_t api_version)
+{
+  return (api_version << 10) >> 22;
+}
+
+static uint32_t VulkanPatchVersion(uint32_t api_version)
+{
+  return (api_version << 22) >> 22;
+}
 
 int main()
 {
@@ -41,11 +56,26 @@ int main()
   callbacks.pfnInternalFree = VulkanInternalFreeNotify;
 
   VkInstance instance = {};
-  VK_CHECK_RET1_ON_FAIL(vkCreateInstance(&info, &callbacks, &instance));
+  VK_CHECK(vkCreateInstance(&info, &callbacks, &instance));
 
-  //const int MAX_PHYSICAL_DEVICES = 8;
-  //VkPhysicalDevice physical_devices[MAX_PHYSICAL_DEVICES] = {};
-  //result = VkEnumeratePhysicalDevices(instance, MAX_PHYSICAL_DEVICES, physical_devices);
+  uint32_t num_physical_devices = 8;
+  VkPhysicalDevice physical_devices[8] = {};
+  VK_CHECK(vkEnumeratePhysicalDevices(instance, &num_physical_devices, physical_devices));
+  printf("%u physical device(s) found!\n", num_physical_devices);
+
+  for (uint32_t i = 0; i < num_physical_devices; ++i)
+  {
+    VkPhysicalDeviceProperties properties = {};
+    vkGetPhysicalDeviceProperties(physical_devices[i], &properties);
+    printf("physical_devices[%d]:\n", i);
+    printf("  Vulkan API %u.%u.%u\n", VulkanMajorVersion(properties.apiVersion), VulkanMinorVersion(properties.apiVersion), VulkanPatchVersion(properties.apiVersion));
+    printf("  Vulkan driver version: %u\n", properties.driverVersion);
+    printf("  Vendor: %u\n", properties.vendorID);
+    printf("  Device: %u\n", properties.deviceID);
+    printf("  Device type: %u\n", properties.deviceType);
+    printf("  Device name: %s\n", properties.deviceName);
+    printf("\n");
+  }
 
   printf("Vulkan succeeded!\n");
   getchar();
