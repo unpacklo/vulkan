@@ -67,7 +67,7 @@ int main()
   {
     VkPhysicalDeviceProperties properties = {};
     vkGetPhysicalDeviceProperties(physical_devices[i], &properties);
-    printf("physical_devices[%d]:\n", i);
+    printf("physical_devices[%u]:\n", i);
     printf("  Vulkan API %u.%u.%u\n", VulkanMajorVersion(properties.apiVersion), VulkanMinorVersion(properties.apiVersion), VulkanPatchVersion(properties.apiVersion));
     printf("  Vulkan driver version: %u\n", properties.driverVersion);
     printf("  Vendor: %u\n", properties.vendorID);
@@ -77,6 +77,28 @@ int main()
     printf("\n");
   }
 
+  uint32_t num_queue_properties = 16;
+  VkQueueFamilyProperties queue_properties[16] = {};
+  vkGetPhysicalDeviceQueueFamilyProperties(physical_devices[0], &num_queue_properties, queue_properties);
+
+  for (uint32_t i = 0; i < num_queue_properties; ++i)
+  {
+    printf("queue_properties[%u]:\n", i);
+    printf("  Flags: %u\n", queue_properties[i].queueFlags);
+    printf("  Queue count: %u\n", queue_properties[i].queueCount);
+    printf("  Min image transfer granularity: (%u, %u, %u)\n", queue_properties[i].minImageTransferGranularity.width, queue_properties[i].minImageTransferGranularity.height, queue_properties[i].minImageTransferGranularity.depth);
+  }
+
+  VkDevice device = {};
+  VkDeviceQueueCreateInfo queue_create_info = {};
+  VkDeviceCreateInfo device_create_info = {};
+  device_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+  device_create_info.queueCreateInfoCount = 1;
+  device_create_info.pQueueCreateInfos = &queue_create_info;
+  VK_CHECK(vkCreateDevice(physical_devices[0], &device_create_info, &callbacks, &device));
+
+  vkDestroyDevice(device, &callbacks);
+  vkDestroyInstance(instance, &callbacks);
   printf("Vulkan succeeded!\n");
   getchar();
 
