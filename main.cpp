@@ -45,6 +45,15 @@ const char* const g_EnabledDeviceExtensions[] =
 
 int main()
 {
+  HWND hwnd = CreateWindow(NULL, TEXT("Vulkan"), WS_OVERLAPPED | WS_VISIBLE, CW_USEDEFAULT, CW_USEDEFAULT, 1280, 720, NULL, NULL, NULL, NULL);
+
+  if (hwnd == NULL)
+  {
+    char buffer[512] = {};
+    DWORD result = FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM, NULL, GetLastError(), 0, buffer, sizeof(buffer), NULL);
+    printf("%s\n", buffer);
+  }
+
   VkInstanceCreateInfo info = {};
   info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
   info.enabledExtensionCount = ARRAY_COUNT(g_EnabledInstanceExtensions);
