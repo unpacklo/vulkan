@@ -5,6 +5,7 @@
 #define VK_USE_PLATFORM_WIN32_KHR
 #include <vulkan/vulkan.h>
 #include <Windows.h>
+#include <tchar.h>
 
 void* VulkanAlignedAlloc(void* userdata, size_t bytes, size_t alignment, VkSystemAllocationScope alloc_scope)
 {
@@ -43,16 +44,84 @@ const char* const g_EnabledDeviceExtensions[] =
   VK_KHR_SWAPCHAIN_EXTENSION_NAME,
 };
 
-int main()
+LRESULT CALLBACK WndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
-  HWND hwnd = CreateWindow(NULL, TEXT("Vulkan"), WS_OVERLAPPED | WS_VISIBLE, CW_USEDEFAULT, CW_USEDEFAULT, 1280, 720, NULL, NULL, NULL, NULL);
+  switch (uMsg)
+  {
+  //case WM_CREATE:
+  //{
+  //  printf("WndProc() received WM_CREATE!\n");
+  //  return 0;
+  //}
+  //case WM_NCCREATE:
+  //{
+  //  printf("WndProc() received WM_NCCREATE!\n");
+  //  return TRUE;
+  //}
+  //case WM_NCDESTROY:
+  //{
+  //  printf("WndProc() received WM_NCDESTROY!\n");
+  //  return 0;
+  //}
+  //case WM_QUIT:
+  //{
+  //  printf("WndProc() received WM_QUIT!\n");
+  //  return 0;
+  //}
+  case WM_DESTROY:
+  {
+    PostQuitMessage(0);
+    return 0;
+  }
+  default:
+  {
+    return DefWindowProc(hwnd, uMsg, wParam, lParam);
+  }
+  }
+}
+
+int main(int argc, char* argv[])
+{
+  static TCHAR szWindowClass[] = _T("vulkan");
+  static TCHAR szTitle[] = _T("Vulkan");
+  HINSTANCE hInstance = GetModuleHandle(NULL);
+  WNDCLASSEX wcex = {};
+
+  wcex.cbSize = sizeof(WNDCLASSEX);
+  wcex.style = CS_HREDRAW | CS_VREDRAW;
+  wcex.lpfnWndProc = WndProc;
+  wcex.cbClsExtra = 0;
+  wcex.cbWndExtra = 0;
+  wcex.hInstance = hInstance;
+  wcex.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_APPLICATION));
+  wcex.hCursor = LoadCursor(NULL, IDC_ARROW);
+  wcex.hbrBackground = (HBRUSH)(COLOR_WINDOW + 1);
+  wcex.lpszMenuName = NULL;
+  wcex.lpszClassName = szWindowClass;
+  wcex.hIconSm = LoadIcon(hInstance, MAKEINTRESOURCE(IDI_APPLICATION));
+
+  if (!RegisterClassEx(&wcex))
+  {
+    MessageBox(NULL,
+      _T("Call to RegisterClassEx failed!"),
+      _T("Win32 Guided Tour"),
+      NULL);
+
+    return 1;
+  }
+
+  HWND hwnd = CreateWindow(szWindowClass, szTitle, WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, 1280, 720, NULL, NULL, hInstance, NULL);
 
   if (hwnd == NULL)
   {
     char buffer[512] = {};
     DWORD result = FormatMessageA(FORMAT_MESSAGE_FROM_SYSTEM, NULL, GetLastError(), 0, buffer, sizeof(buffer), NULL);
     printf("%s\n", buffer);
+    getchar();
+    return 1;
   }
+
+  ShowWindow(hwnd, SW_SHOW);
 
   VkInstanceCreateInfo info = {};
   info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
@@ -123,7 +192,7 @@ int main()
 
   VkWin32SurfaceCreateInfoKHR surface_create_info = {};
   surface_create_info.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
-  //surface_create_info.hinstance = ; what to do?
+  surface_create_info.hinstance = GetModuleHandle(NULL); //what to do?
   surface_create_info.hwnd = GetActiveWindow();
   VkSurfaceKHR surface = {};
   VK_CHECK(vkCreateWin32SurfaceKHR(instance, &surface_create_info, &callbacks, &surface));
@@ -155,7 +224,22 @@ int main()
   vkDestroyDevice(device, &callbacks);
   vkDestroyInstance(instance, &callbacks);
   printf("Vulkan succeeded!\n");
-  getchar();
+
+  MSG msg;
+
+  while (BOOL message_result = GetMessage(&msg, NULL, 0, 0))
+  {
+    if (message_result == -1)
+    {
+      // handle the error and possibly exit
+      break;
+    }
+    else
+    {
+      TranslateMessage(&msg);
+      DispatchMessage(&msg);
+    }
+  }
 
   return 0;
 }
