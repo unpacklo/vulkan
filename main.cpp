@@ -44,30 +44,15 @@ const char* const g_EnabledDeviceExtensions[] =
   VK_KHR_SWAPCHAIN_EXTENSION_NAME,
 };
 
+const char* const g_EnabledValidationLayers[] =
+{
+  "VK_LAYER_LUNARG_standard_validation",
+};
+
 LRESULT CALLBACK WndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
   switch (uMsg)
   {
-  //case WM_CREATE:
-  //{
-  //  printf("WndProc() received WM_CREATE!\n");
-  //  return 0;
-  //}
-  //case WM_NCCREATE:
-  //{
-  //  printf("WndProc() received WM_NCCREATE!\n");
-  //  return TRUE;
-  //}
-  //case WM_NCDESTROY:
-  //{
-  //  printf("WndProc() received WM_NCDESTROY!\n");
-  //  return 0;
-  //}
-  //case WM_QUIT:
-  //{
-  //  printf("WndProc() received WM_QUIT!\n");
-  //  return 0;
-  //}
   case WM_DESTROY:
   {
     PostQuitMessage(0);
@@ -127,6 +112,8 @@ int main(int argc, char* argv[])
   info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
   info.enabledExtensionCount = ARRAY_COUNT(g_EnabledInstanceExtensions);
   info.ppEnabledExtensionNames = g_EnabledInstanceExtensions;
+  info.enabledLayerCount = ARRAY_COUNT(g_EnabledValidationLayers);
+  info.ppEnabledLayerNames = g_EnabledValidationLayers;
 
   VkAllocationCallbacks callbacks = {};
   callbacks.pfnAllocation = VulkanAlignedAlloc;
@@ -219,12 +206,6 @@ int main(int argc, char* argv[])
   VkSwapchainKHR swapchain = {};  
   vkCreateSwapchainKHR(device, &swapchain_create_info, &callbacks, &swapchain);
 
-  vkDestroySwapchainKHR(device, swapchain, &callbacks);
-  vkDestroySurfaceKHR(instance, surface, &callbacks);
-  vkDestroyDevice(device, &callbacks);
-  vkDestroyInstance(instance, &callbacks);
-  printf("Vulkan succeeded!\n");
-
   MSG msg;
 
   while (BOOL message_result = GetMessage(&msg, NULL, 0, 0))
@@ -240,6 +221,11 @@ int main(int argc, char* argv[])
       DispatchMessage(&msg);
     }
   }
+
+  vkDestroySwapchainKHR(device, swapchain, &callbacks);
+  vkDestroySurfaceKHR(instance, surface, &callbacks);
+  vkDestroyDevice(device, &callbacks);
+  vkDestroyInstance(instance, &callbacks);
 
   return 0;
 }
