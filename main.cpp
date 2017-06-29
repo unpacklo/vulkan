@@ -200,7 +200,7 @@ int main(int argc, char* argv[])
   swapchain_create_info.queueFamilyIndexCount = 1;
   swapchain_create_info.pQueueFamilyIndices = &queue_family_index;
   swapchain_create_info.preTransform = surface_capabilities.currentTransform;
-  swapchain_create_info.compositeAlpha = VK_COMPOSITE_ALPHA_PRE_MULTIPLIED_BIT_KHR;
+  swapchain_create_info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
   swapchain_create_info.presentMode = VK_PRESENT_MODE_IMMEDIATE_KHR;
 
   VkSwapchainKHR swapchain = {};  
