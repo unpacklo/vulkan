@@ -144,9 +144,10 @@ int main(int argc, char* argv[])
     printf("\n");
   }
 
+  VkPhysicalDevice physical_device = physical_devices[0];
   uint32_t num_queue_properties = 16;
   VkQueueFamilyProperties queue_properties[16] = {};
-  vkGetPhysicalDeviceQueueFamilyProperties(physical_devices[0], &num_queue_properties, queue_properties);
+  vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &num_queue_properties, queue_properties);
 
   for (uint32_t i = 0; i < num_queue_properties; ++i)
   {
@@ -172,7 +173,7 @@ int main(int argc, char* argv[])
   device_create_info.ppEnabledExtensionNames = g_EnabledDeviceExtensions;
 
   VkDevice device = {};
-  VK_CHECK(vkCreateDevice(physical_devices[0], &device_create_info, &callbacks, &device));
+  VK_CHECK(vkCreateDevice(physical_device, &device_create_info, &callbacks, &device));
 
   VkQueue queue = {};
   vkGetDeviceQueue(device, queue_family_index, 0, &queue);
@@ -185,18 +186,43 @@ int main(int argc, char* argv[])
   VK_CHECK(vkCreateWin32SurfaceKHR(instance, &surface_create_info, &callbacks, &surface));
 
   VkSurfaceCapabilitiesKHR surface_capabilities = {};
-  VK_CHECK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_devices[0], surface, &surface_capabilities));
+  VK_CHECK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_device, surface, &surface_capabilities));
 
   VkBool32 surface_supported = VK_FALSE;
-  VK_CHECK(vkGetPhysicalDeviceSurfaceSupportKHR(physical_devices[0], queue_family_index, surface, &surface_supported));
+  VK_CHECK(vkGetPhysicalDeviceSurfaceSupportKHR(physical_device, queue_family_index, surface, &surface_supported));
+  printf("\n");
   printf("Surface %#p supported: %s\n", surface, surface_supported == VK_TRUE ? "true" : "false");
+  printf("\n");
+
+  uint32_t surface_formats_count = 32;
+  VkSurfaceFormatKHR surface_formats[32] = {};
+  VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device, surface, &surface_formats_count, surface_formats));
+
+  for (uint32_t i = 0; i < surface_formats_count; ++i)
+  {
+    printf("surface_formats[%u]:\n", i);
+    printf("  format = %d\n", surface_formats[i].format);
+    printf("  colorspace = %d\n", surface_formats[i].colorSpace);
+  }
+
+  VkSurfaceFormatKHR surface_format = surface_formats[0];
+
+  uint32_t present_modes_count = 32;
+  VkPresentModeKHR present_modes[32] = {};
+  VK_CHECK(vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device, surface, &present_modes_count, present_modes));
+
+  printf("\n");
+  for (uint32_t i = 0; i < present_modes_count; ++i)
+  {
+    printf("present_modes[%u] = %d\n", i, present_modes[i]);
+  }
 
   VkSwapchainCreateInfoKHR swapchain_create_info = {};
   swapchain_create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
   swapchain_create_info.surface = surface;
   swapchain_create_info.minImageCount = 2;
-  swapchain_create_info.imageFormat = VK_FORMAT_B8G8R8A8_UNORM;
-  swapchain_create_info.imageColorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+  swapchain_create_info.imageFormat = surface_format.format;
+  swapchain_create_info.imageColorSpace = surface_format.colorSpace;
   swapchain_create_info.imageExtent = surface_capabilities.currentExtent;
   swapchain_create_info.imageArrayLayers = 1;
   swapchain_create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
@@ -205,7 +231,7 @@ int main(int argc, char* argv[])
   swapchain_create_info.pQueueFamilyIndices = &queue_family_index;
   swapchain_create_info.preTransform = surface_capabilities.currentTransform;
   swapchain_create_info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-  swapchain_create_info.presentMode = VK_PRESENT_MODE_IMMEDIATE_KHR;
+  swapchain_create_info.presentMode = present_modes[0];
 
   VkSwapchainKHR swapchain = {};  
   vkCreateSwapchainKHR(device, &swapchain_create_info, &callbacks, &swapchain);
