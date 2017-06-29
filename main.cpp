@@ -179,13 +179,17 @@ int main(int argc, char* argv[])
 
   VkWin32SurfaceCreateInfoKHR surface_create_info = {};
   surface_create_info.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
-  surface_create_info.hinstance = GetModuleHandle(NULL); //what to do?
+  surface_create_info.hinstance = hInstance;
   surface_create_info.hwnd = GetActiveWindow();
   VkSurfaceKHR surface = {};
   VK_CHECK(vkCreateWin32SurfaceKHR(instance, &surface_create_info, &callbacks, &surface));
 
   VkSurfaceCapabilitiesKHR surface_capabilities = {};
   VK_CHECK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_devices[0], surface, &surface_capabilities));
+
+  VkBool32 surface_supported = VK_FALSE;
+  VK_CHECK(vkGetPhysicalDeviceSurfaceSupportKHR(physical_devices[0], queue_family_index, surface, &surface_supported));
+  printf("Surface %#p supported: %s\n", surface, surface_supported == VK_TRUE ? "true" : "false");
 
   VkSwapchainCreateInfoKHR swapchain_create_info = {};
   swapchain_create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
