@@ -236,6 +236,20 @@ int main(int argc, char* argv[])
   VkSwapchainKHR swapchain = {};  
   vkCreateSwapchainKHR(device, &swapchain_create_info, &callbacks, &swapchain);
 
+  VkCommandPoolCreateInfo cmd_pool_info = {};
+  cmd_pool_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+  cmd_pool_info.queueFamilyIndex = queue_family_index;
+  VkCommandPool cmd_pool = {};
+  VK_CHECK(vkCreateCommandPool(device, &cmd_pool_info, &callbacks, &cmd_pool));
+
+  VkCommandBufferAllocateInfo cmd_buffer_alloc_info = {};
+  cmd_buffer_alloc_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+  cmd_buffer_alloc_info.commandPool = cmd_pool;
+  cmd_buffer_alloc_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+  cmd_buffer_alloc_info.commandBufferCount = 1;
+  VkCommandBuffer cmd_buffer = {};
+  VK_CHECK(vkAllocateCommandBuffers(device, &cmd_buffer_alloc_info, &cmd_buffer));
+
   MSG msg;
 
   while (BOOL message_result = GetMessage(&msg, NULL, 0, 0))
@@ -252,6 +266,7 @@ int main(int argc, char* argv[])
     }
   }
 
+  vkDestroyCommandPool(device, cmd_pool, &callbacks);
   vkDestroySwapchainKHR(device, swapchain, &callbacks);
   vkDestroySurfaceKHR(instance, surface, &callbacks);
   vkDestroyDevice(device, &callbacks);
