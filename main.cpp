@@ -127,6 +127,7 @@ int main(int argc, char* argv[])
 
   uint32_t num_physical_devices = 8;
   VkPhysicalDevice physical_devices[8] = {};
+  VkPhysicalDeviceMemoryProperties memory_properties[8] = {};
   VK_CHECK(vkEnumeratePhysicalDevices(instance, &num_physical_devices, physical_devices));
   printf("%u physical device(s) found!\n", num_physical_devices);
 
@@ -142,6 +143,7 @@ int main(int argc, char* argv[])
     printf("  Device type: %u\n", properties.deviceType);
     printf("  Device name: %s\n", properties.deviceName);
     printf("\n");
+    vkGetPhysicalDeviceMemoryProperties(physical_devices[i], memory_properties + i);
   }
 
   VkPhysicalDevice physical_device = physical_devices[0];
@@ -250,6 +252,61 @@ int main(int argc, char* argv[])
   VkCommandBuffer cmd_buffer = {};
   VK_CHECK(vkAllocateCommandBuffers(device, &cmd_buffer_alloc_info, &cmd_buffer));
 
+  VkImageCreateInfo image_create_info = {};
+  image_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+  image_create_info.imageType = VK_IMAGE_TYPE_2D;
+  image_create_info.format = VK_FORMAT_D16_UNORM;
+  image_create_info.extent.width = 1280;
+  image_create_info.extent.height = 720;
+  image_create_info.extent.depth = 1;
+  image_create_info.mipLevels = 1;
+  image_create_info.arrayLayers = 1;
+  image_create_info.samples = VK_SAMPLE_COUNT_1_BIT;
+  image_create_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+  image_create_info.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+  image_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+  VkImage depth_buffer = {};
+  VK_CHECK(vkCreateImage(device, &image_create_info, &callbacks, &depth_buffer));
+
+  VkMemoryRequirements mem_reqs = {};
+  vkGetImageMemoryRequirements(device, depth_buffer, &mem_reqs);
+  VkMemoryAllocateInfo mem_alloc_info = {};
+  mem_alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+  mem_alloc_info.allocationSize = mem_reqs.size;
+
+  for (int i = 0; i < memory_properties[0].memoryTypeCount; ++i)
+  {
+    // wtf is this check doing?  Why does this work?
+    bool is_supported_memory_type = (mem_reqs.memoryTypeBits & (1 << i)) > 0;
+    if (is_supported_memory_type)
+    {
+      if ((memory_properties[0].memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) == VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
+      {
+        mem_alloc_info.memoryTypeIndex = i;
+      }
+    }
+  }
+
+  VkDeviceMemory depth_buffer_memory = {};
+  VK_CHECK(vkAllocateMemory(device, &mem_alloc_info, &callbacks, &depth_buffer_memory));
+  VK_CHECK(vkBindImageMemory(device, depth_buffer, depth_buffer_memory, 0));
+  VkImageViewCreateInfo depth_view_info = {};
+  depth_view_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+  depth_view_info.image = depth_buffer;
+  depth_view_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+  depth_view_info.format = VK_FORMAT_D16_UNORM;
+  depth_view_info.components.r = VK_COMPONENT_SWIZZLE_R;
+  depth_view_info.components.g = VK_COMPONENT_SWIZZLE_G;
+  depth_view_info.components.b = VK_COMPONENT_SWIZZLE_B;
+  depth_view_info.components.a = VK_COMPONENT_SWIZZLE_A;
+  depth_view_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+  depth_view_info.subresourceRange.baseMipLevel = 0;
+  depth_view_info.subresourceRange.levelCount = 1;
+  depth_view_info.subresourceRange.baseArrayLayer = 0;
+  depth_view_info.subresourceRange.layerCount = 1;
+  VkImageView depth_image_view = {};
+  VK_CHECK(vkCreateImageView(device, &depth_view_info, &callbacks, &depth_image_view));
+
   MSG msg;
 
   while (BOOL message_result = GetMessage(&msg, NULL, 0, 0))
@@ -266,6 +323,9 @@ int main(int argc, char* argv[])
     }
   }
 
+  vkDestroyImageView(device, depth_image_view, &callbacks);
+  vkFreeMemory(device, depth_buffer_memory, &callbacks);
+  vkDestroyImage(device, depth_buffer, &callbacks);
   vkDestroyCommandPool(device, cmd_pool, &callbacks);
   vkDestroySwapchainKHR(device, swapchain, &callbacks);
   vkDestroySurfaceKHR(instance, surface, &callbacks);
