@@ -65,6 +65,11 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
   }
 }
 
+struct Mat4
+{
+  float m[16];
+};
+
 int main(int argc, char* argv[])
 {
   static TCHAR szWindowClass[] = _T("vulkan");
@@ -235,7 +240,7 @@ int main(int argc, char* argv[])
   swapchain_create_info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
   swapchain_create_info.presentMode = present_modes[0];
 
-  VkSwapchainKHR swapchain = {};  
+  VkSwapchainKHR swapchain = {};
   vkCreateSwapchainKHR(device, &swapchain_create_info, &callbacks, &swapchain);
 
   VkCommandPoolCreateInfo cmd_pool_info = {};
@@ -274,7 +279,7 @@ int main(int argc, char* argv[])
   mem_alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
   mem_alloc_info.allocationSize = mem_reqs.size;
 
-  for (int i = 0; i < memory_properties[0].memoryTypeCount; ++i)
+  for (uint32_t i = 0; i < memory_properties[0].memoryTypeCount; ++i)
   {
     // wtf is this check doing?  Why does this work?
     bool is_supported_memory_type = (mem_reqs.memoryTypeBits & (1 << i)) > 0;
@@ -307,6 +312,55 @@ int main(int argc, char* argv[])
   VkImageView depth_image_view = {};
   VK_CHECK(vkCreateImageView(device, &depth_view_info, &callbacks, &depth_image_view));
 
+  VkBufferCreateInfo buffer_create_info = {};
+  buffer_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  buffer_create_info.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+  buffer_create_info.size = sizeof(Mat4);
+  buffer_create_info.queueFamilyIndexCount = 0;
+  buffer_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+  VkBuffer uniform_buffer = {};
+  VK_CHECK(vkCreateBuffer(device, &buffer_create_info, &callbacks, &uniform_buffer));
+
+  VkMemoryRequirements memory_requirements = {};
+  vkGetBufferMemoryRequirements(device, uniform_buffer, &memory_requirements);
+
+  VkMemoryAllocateInfo alloc_info = {};
+  alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+  alloc_info.allocationSize = memory_requirements.size;
+
+  VkFlags required_mask = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
+
+  // Look for a memory type that matches what we're looking for.
+  for (uint32_t i = 0; i < memory_properties[0].memoryTypeCount; ++i)
+  {
+    if ((memory_requirements.memoryTypeBits & (1 << i)) && ((memory_properties[0].memoryTypes[i].propertyFlags & required_mask) == required_mask))
+    {
+      alloc_info.memoryTypeIndex = i;
+      break;
+    }
+  }
+  
+  VkDeviceMemory uniform_device_memory = {};
+  VK_CHECK(vkAllocateMemory(device, &alloc_info, &callbacks, &uniform_device_memory));
+
+  uint8_t* mapped_uniform_data = NULL;
+  VK_CHECK(vkMapMemory(device, uniform_device_memory, 0, memory_requirements.size, 0, (void**)&mapped_uniform_data));
+
+  Mat4 mvp = {};
+  mvp.m[0] = 1.0f;
+  mvp.m[5] = 1.0f;
+  mvp.m[10] = 1.0f;
+  mvp.m[15] = 1.0f;
+  memmove(mapped_uniform_data, &mvp, sizeof(mvp));
+  vkUnmapMemory(device, uniform_device_memory);
+
+  VK_CHECK(vkBindBufferMemory(device, uniform_buffer, uniform_device_memory, 0));
+
+  VkDescriptorBufferInfo buffer_info = {};
+  buffer_info.buffer = uniform_buffer;
+  buffer_info.offset = 0;
+  buffer_info.range = sizeof(mvp);
+  
   MSG msg;
 
   while (BOOL message_result = GetMessage(&msg, NULL, 0, 0))
@@ -323,6 +377,8 @@ int main(int argc, char* argv[])
     }
   }
 
+  vkFreeMemory(device, uniform_device_memory, &callbacks);
+  vkDestroyBuffer(device, uniform_buffer, &callbacks);
   vkDestroyImageView(device, depth_image_view, &callbacks);
   vkFreeMemory(device, depth_buffer_memory, &callbacks);
   vkDestroyImage(device, depth_buffer, &callbacks);
@@ -331,6 +387,8 @@ int main(int argc, char* argv[])
   vkDestroySurfaceKHR(instance, surface, &callbacks);
   vkDestroyDevice(device, &callbacks);
   vkDestroyInstance(instance, &callbacks);
+
+  getchar();
 
   return 0;
 }
