@@ -72,6 +72,7 @@ struct Mat4
 
 int main(int argc, char* argv[])
 {
+  printf("Vulkan header version: %u\n", VK_HEADER_VERSION);
   static TCHAR szWindowClass[] = _T("vulkan");
   static TCHAR szTitle[] = _T("Vulkan");
   HINSTANCE hInstance = GetModuleHandle(NULL);
@@ -117,7 +118,7 @@ int main(int argc, char* argv[])
   info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
   info.enabledExtensionCount = ARRAY_COUNT(g_EnabledInstanceExtensions);
   info.ppEnabledExtensionNames = g_EnabledInstanceExtensions;
-  info.enabledLayerCount = ARRAY_COUNT(g_EnabledValidationLayers);
+  info.enabledLayerCount = 0;// ARRAY_COUNT(g_EnabledValidationLayers);
   info.ppEnabledLayerNames = g_EnabledValidationLayers;
 
   VkAllocationCallbacks callbacks = {};
@@ -142,7 +143,7 @@ int main(int argc, char* argv[])
     vkGetPhysicalDeviceProperties(physical_devices[i], &properties);
     printf("physical_devices[%u]:\n", i);
     printf("  Vulkan API %u.%u.%u\n", VK_VERSION_MAJOR(properties.apiVersion), VK_VERSION_MINOR(properties.apiVersion), VK_VERSION_PATCH(properties.apiVersion));
-    printf("  Vulkan driver version: %u\n", properties.driverVersion);
+    printf("  Vulkan driver version: %u.%u.%u\n", VK_VERSION_MAJOR(properties.driverVersion), VK_VERSION_MINOR(properties.driverVersion), VK_VERSION_PATCH(properties.driverVersion));
     printf("  Vendor: %u\n", properties.vendorID);
     printf("  Device: %u\n", properties.deviceID);
     printf("  Device type: %u\n", properties.deviceType);
@@ -360,6 +361,65 @@ int main(int argc, char* argv[])
   buffer_info.buffer = uniform_buffer;
   buffer_info.offset = 0;
   buffer_info.range = sizeof(mvp);
+
+  VkSemaphore img_acq_sem = {};
+  VkSemaphoreCreateInfo sem_create_info = {};
+  sem_create_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+  VK_CHECK(vkCreateSemaphore(device, &sem_create_info, &callbacks, &img_acq_sem));
+
+  uint32_t current_buffer = {};
+  VK_CHECK(vkAcquireNextImageKHR(device, swapchain, UINT64_MAX, img_acq_sem, VK_NULL_HANDLE, &current_buffer));
+
+  VkAttachmentDescription attachments[2] = {};
+  attachments[0].format = surface_format.format;
+  attachments[0].samples = VK_SAMPLE_COUNT_1_BIT;
+  attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+  attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+  attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+  attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+  attachments[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+  attachments[0].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+  attachments[1].format = VK_FORMAT_D16_UNORM;
+  attachments[1].samples = VK_SAMPLE_COUNT_1_BIT;
+  attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+  attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+  attachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+  attachments[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+  attachments[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+  attachments[1].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+  VkAttachmentReference color_reference = {};
+  color_reference.attachment = 0;
+  color_reference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+  VkAttachmentReference depth_reference = {};
+  depth_reference.attachment = 1;
+  depth_reference.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+  VkSubpassDescription subpass = {};
+  subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+  subpass.flags = 0;
+  subpass.inputAttachmentCount = 0;
+  subpass.pInputAttachments = nullptr;
+  subpass.colorAttachmentCount = 1;
+  subpass.pColorAttachments = &color_reference;
+  subpass.pResolveAttachments = nullptr;
+  subpass.pDepthStencilAttachment = &depth_reference;
+  subpass.preserveAttachmentCount = 0;
+  subpass.pPreserveAttachments = nullptr;
+
+  VkRenderPassCreateInfo rp_info = {};
+  rp_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+  rp_info.attachmentCount = 2;
+  rp_info.pAttachments = attachments;
+  rp_info.subpassCount = 1;
+  rp_info.pSubpasses = &subpass;
+  rp_info.dependencyCount = 0;
+  rp_info.pDependencies = nullptr;
+
+  VkRenderPass render_pass = {};
+  VK_CHECK(vkCreateRenderPass(device, &rp_info, &callbacks, &render_pass));
   
   MSG msg;
 
@@ -377,6 +437,8 @@ int main(int argc, char* argv[])
     }
   }
 
+  vkDestroyRenderPass(device, render_pass, &callbacks);
+  vkDestroySemaphore(device, img_acq_sem, &callbacks);
   vkFreeMemory(device, uniform_device_memory, &callbacks);
   vkDestroyBuffer(device, uniform_buffer, &callbacks);
   vkDestroyImageView(device, depth_image_view, &callbacks);
