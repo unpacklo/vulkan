@@ -118,7 +118,7 @@ int main(int argc, char* argv[])
   info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
   info.enabledExtensionCount = ARRAY_COUNT(g_EnabledInstanceExtensions);
   info.ppEnabledExtensionNames = g_EnabledInstanceExtensions;
-  info.enabledLayerCount = 0;// ARRAY_COUNT(g_EnabledValidationLayers);
+  info.enabledLayerCount = ARRAY_COUNT(g_EnabledValidationLayers);
   info.ppEnabledLayerNames = g_EnabledValidationLayers;
 
   VkAllocationCallbacks callbacks = {};
@@ -242,7 +242,35 @@ int main(int argc, char* argv[])
   swapchain_create_info.presentMode = present_modes[0];
 
   VkSwapchainKHR swapchain = {};
-  vkCreateSwapchainKHR(device, &swapchain_create_info, &callbacks, &swapchain);
+  VK_CHECK(vkCreateSwapchainKHR(device, &swapchain_create_info, &callbacks, &swapchain));
+
+  uint32_t swapchain_image_count = {};
+  VK_CHECK(vkGetSwapchainImagesKHR(device, swapchain, &swapchain_image_count, nullptr));
+
+  VkImage swapchain_images[8] = {};
+  VkImageView swapchain_image_views[8] = {};
+  VK_CHECK(vkGetSwapchainImagesKHR(device, swapchain, &swapchain_image_count, swapchain_images));
+
+  for (uint32_t i = 0; i < swapchain_image_count; ++i)
+  {
+    VkImageViewCreateInfo color_image_view = {};
+    color_image_view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    color_image_view.pNext = nullptr;
+    color_image_view.flags = 0;
+    color_image_view.image = swapchain_images[i];
+    color_image_view.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    color_image_view.format = surface_format.format;
+    color_image_view.components.r = VK_COMPONENT_SWIZZLE_R;
+    color_image_view.components.g = VK_COMPONENT_SWIZZLE_G;
+    color_image_view.components.b = VK_COMPONENT_SWIZZLE_B;
+    color_image_view.components.a = VK_COMPONENT_SWIZZLE_A;
+    color_image_view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    color_image_view.subresourceRange.baseMipLevel = 0;
+    color_image_view.subresourceRange.levelCount = 1;
+    color_image_view.subresourceRange.baseArrayLayer = 0;
+    color_image_view.subresourceRange.layerCount = 1;
+    VK_CHECK(vkCreateImageView(device, &color_image_view, &callbacks, swapchain_image_views + i));
+  }
 
   VkCommandPoolCreateInfo cmd_pool_info = {};
   cmd_pool_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
@@ -368,7 +396,7 @@ int main(int argc, char* argv[])
   VK_CHECK(vkCreateSemaphore(device, &sem_create_info, &callbacks, &img_acq_sem));
 
   uint32_t current_buffer = {};
-  VK_CHECK(vkAcquireNextImageKHR(device, swapchain, UINT64_MAX, img_acq_sem, VK_NULL_HANDLE, &current_buffer));
+  VK_CHECK(vkAcquireNextImageKHR(device, swapchain, UINT64_MAX, img_acq_sem, VK_NULL_HANDLE, &current_buffer)); // There's a bug here in the validation layer where if you did not get the swapchain images, you will crash!
 
   VkAttachmentDescription attachments[2] = {};
   attachments[0].format = surface_format.format;
@@ -445,6 +473,10 @@ int main(int argc, char* argv[])
   vkFreeMemory(device, depth_buffer_memory, &callbacks);
   vkDestroyImage(device, depth_buffer, &callbacks);
   vkDestroyCommandPool(device, cmd_pool, &callbacks);
+  for (uint32_t i = 0; i < swapchain_image_count; ++i)
+  {
+    vkDestroyImageView(device, swapchain_image_views[i], &callbacks);
+  }
   vkDestroySwapchainKHR(device, swapchain, &callbacks);
   vkDestroySurfaceKHR(instance, surface, &callbacks);
   vkDestroyDevice(device, &callbacks);
