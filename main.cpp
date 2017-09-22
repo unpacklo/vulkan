@@ -73,6 +73,8 @@ struct Mat4
 int main(int argc, char* argv[])
 {
   printf("Vulkan header version: %u\n", VK_HEADER_VERSION);
+  int width = 1280;
+  int height = 720;
   static TCHAR szWindowClass[] = _T("vulkan");
   static TCHAR szTitle[] = _T("Vulkan");
   HINSTANCE hInstance = GetModuleHandle(NULL);
@@ -101,7 +103,7 @@ int main(int argc, char* argv[])
     return 1;
   }
 
-  HWND hwnd = CreateWindow(szWindowClass, szTitle, WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, 1280, 720, NULL, NULL, hInstance, NULL);
+  HWND hwnd = CreateWindow(szWindowClass, szTitle, WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, width, height, NULL, NULL, hInstance, NULL);
 
   if (hwnd == NULL)
   {
@@ -290,8 +292,8 @@ int main(int argc, char* argv[])
   image_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
   image_create_info.imageType = VK_IMAGE_TYPE_2D;
   image_create_info.format = VK_FORMAT_D16_UNORM;
-  image_create_info.extent.width = 1280;
-  image_create_info.extent.height = 720;
+  image_create_info.extent.width = width;
+  image_create_info.extent.height = height;
   image_create_info.extent.depth = 1;
   image_create_info.mipLevels = 1;
   image_create_info.arrayLayers = 1;
@@ -448,6 +450,27 @@ int main(int argc, char* argv[])
 
   VkRenderPass render_pass = {};
   VK_CHECK(vkCreateRenderPass(device, &rp_info, &callbacks, &render_pass));
+
+  VkImageView framebuffer_attachments[2] = {};
+  framebuffer_attachments[1] = depth_image_view;
+
+  VkFramebufferCreateInfo fb_info = {};
+  fb_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+  fb_info.pNext = nullptr;
+  fb_info.renderPass = render_pass;
+  fb_info.attachmentCount = 2;
+  fb_info.pAttachments = framebuffer_attachments;
+  fb_info.width = 1264; // This is so fail, is the windows title bar eating up space?
+  fb_info.height = 681;
+  fb_info.layers = 1;
+
+  VkFramebuffer framebuffers[2] = {};
+
+  for (uint32_t i = 0; i < swapchain_image_count; ++i)
+  {
+    framebuffer_attachments[0] = swapchain_image_views[i];
+    VK_CHECK(vkCreateFramebuffer(device, &fb_info, &callbacks, framebuffers + i));
+  }
   
   MSG msg;
 
@@ -465,6 +488,10 @@ int main(int argc, char* argv[])
     }
   }
 
+  for (uint32_t i = 0; i < swapchain_image_count; ++i)
+  {
+    vkDestroyFramebuffer(device, framebuffers[i], &callbacks);
+  }
   vkDestroyRenderPass(device, render_pass, &callbacks);
   vkDestroySemaphore(device, img_acq_sem, &callbacks);
   vkFreeMemory(device, uniform_device_memory, &callbacks);
