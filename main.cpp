@@ -370,7 +370,7 @@ int main(int argc, char* argv[])
       break;
     }
   }
-  
+
   VkDeviceMemory uniform_device_memory = {};
   VK_CHECK(vkAllocateMemory(device, &alloc_info, &callbacks, &uniform_device_memory));
 
@@ -392,13 +392,31 @@ int main(int argc, char* argv[])
   buffer_info.offset = 0;
   buffer_info.range = sizeof(mvp);
 
-  VkSemaphore img_acq_sem = {};
-  VkSemaphoreCreateInfo sem_create_info = {};
-  sem_create_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-  VK_CHECK(vkCreateSemaphore(device, &sem_create_info, &callbacks, &img_acq_sem));
+  VkDescriptorSetLayoutBinding layout_binding = {};
+  layout_binding.binding = 0;
+  layout_binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+  layout_binding.descriptorCount = 1;
+  layout_binding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+  layout_binding.pImmutableSamplers = NULL;
 
-  uint32_t current_buffer = {};
-  VK_CHECK(vkAcquireNextImageKHR(device, swapchain, UINT64_MAX, img_acq_sem, VK_NULL_HANDLE, &current_buffer)); // There's a bug here in the validation layer where if you did not get the swapchain images, you will crash!
+  VkDescriptorSetLayoutCreateInfo descriptor_layout = {};
+  descriptor_layout.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+  descriptor_layout.pNext = nullptr;
+  descriptor_layout.bindingCount = 1;
+  descriptor_layout.pBindings = &layout_binding;
+
+  VkDescriptorSetLayout desc_layout = {};
+  VK_CHECK(vkCreateDescriptorSetLayout(device, &descriptor_layout, &callbacks, &desc_layout));
+
+  VkPipelineLayout pipeline_layout = {};
+  VkPipelineLayoutCreateInfo pipeline_layout_create_info = {};
+  pipeline_layout_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+  pipeline_layout_create_info.pNext = nullptr;
+  pipeline_layout_create_info.pushConstantRangeCount = 0;
+  pipeline_layout_create_info.pPushConstantRanges = nullptr;
+  pipeline_layout_create_info.setLayoutCount = 1;
+  pipeline_layout_create_info.pSetLayouts = &desc_layout;
+  VK_CHECK(vkCreatePipelineLayout(device, &pipeline_layout_create_info, &callbacks, &pipeline_layout));
 
   VkAttachmentDescription attachments[2] = {};
   attachments[0].format = surface_format.format;
@@ -471,7 +489,214 @@ int main(int argc, char* argv[])
     framebuffer_attachments[0] = swapchain_image_views[i];
     VK_CHECK(vkCreateFramebuffer(device, &fb_info, &callbacks, framebuffers + i));
   }
+
+  VkDynamicState dynamic_state_enables[VK_DYNAMIC_STATE_RANGE_SIZE] = {};
+  VkPipelineDynamicStateCreateInfo dynamic_create_info = {};
+  dynamic_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+  dynamic_create_info.pNext = nullptr;
+  dynamic_create_info.pDynamicStates = dynamic_state_enables;
+  dynamic_create_info.dynamicStateCount = 0;
+
+  VkVertexInputBindingDescription vi_binding = {};
+  VkVertexInputAttributeDescription vi_attribs[2] = {};
+  VkPipelineVertexInputStateCreateInfo vi = {};
+  vi.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+  vi.pNext = nullptr;
+  vi.flags = 0;
+  vi.vertexBindingDescriptionCount = 1;
+  vi.pVertexBindingDescriptions = &vi_binding;
+  vi.vertexAttributeDescriptionCount = 2;
+  vi.pVertexAttributeDescriptions = vi_attribs;
+
+  VkPipelineInputAssemblyStateCreateInfo ia = {};
+  ia.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+  ia.pNext = nullptr;
+  ia.flags = 0;
+  ia.primitiveRestartEnable = VK_FALSE;
+  ia.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+
+  VkPipelineRasterizationStateCreateInfo rs = {};
+  rs.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+  rs.pNext = nullptr;
+  rs.flags = 0;
+  rs.polygonMode = VK_POLYGON_MODE_FILL;
+  rs.cullMode = VK_CULL_MODE_BACK_BIT;
+  rs.frontFace = VK_FRONT_FACE_CLOCKWISE;
+  rs.depthClampEnable = VK_FALSE;
+  rs.rasterizerDiscardEnable = VK_FALSE;
+  rs.depthBiasEnable = VK_FALSE;
+  rs.depthBiasConstantFactor = 0;
+  rs.depthBiasClamp = 0;
+  rs.depthBiasSlopeFactor = 0;
+  rs.lineWidth = 1.0f;
+
+  VkPipelineColorBlendStateCreateInfo cb = {};
+  cb.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+  cb.pNext = nullptr;
+  cb.flags = 0;
+
+  VkPipelineColorBlendAttachmentState att_state[1] = {};
+  att_state[0].colorWriteMask = 0xf;
+  att_state[0].blendEnable = VK_FALSE;
+  att_state[0].alphaBlendOp = VK_BLEND_OP_ADD;
+  att_state[0].colorBlendOp = VK_BLEND_OP_ADD;
+  att_state[0].srcColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+  att_state[0].dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+  att_state[0].srcAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+  att_state[0].dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+  cb.attachmentCount = 1;
+  cb.pAttachments = att_state;
+  cb.logicOpEnable = VK_FALSE;
+  cb.logicOp = VK_LOGIC_OP_NO_OP;
+  cb.blendConstants[0] = 1.0f;
+  cb.blendConstants[1] = 1.0f;
+  cb.blendConstants[2] = 1.0f;
+  cb.blendConstants[3] = 1.0f;
+
+  VkPipelineViewportStateCreateInfo vp = {};
+  vp.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+  vp.pNext = nullptr;
+  vp.flags = 0;
+  vp.viewportCount = 1;
+  dynamic_state_enables[dynamic_create_info.dynamicStateCount++] = VK_DYNAMIC_STATE_VIEWPORT;
+  vp.scissorCount = 1;
+  dynamic_state_enables[dynamic_create_info.dynamicStateCount++] = VK_DYNAMIC_STATE_SCISSOR;
+  vp.pScissors = nullptr;
+  vp.pViewports = nullptr;
+
+  VkPipelineDepthStencilStateCreateInfo ds = {};
+  ds.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+  ds.pNext = nullptr;
+  ds.flags = 0;
+  ds.depthTestEnable = VK_TRUE;
+  ds.depthWriteEnable = VK_TRUE;
+  ds.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+  ds.depthBoundsTestEnable = VK_FALSE;
+  ds.minDepthBounds = 0;
+  ds.maxDepthBounds = 0;
+  ds.stencilTestEnable = VK_FALSE;
+  ds.back.failOp = VK_STENCIL_OP_KEEP;
+  ds.back.passOp = VK_STENCIL_OP_KEEP;
+  ds.back.compareOp = VK_COMPARE_OP_ALWAYS;
+  ds.back.compareMask = 0;
+  ds.back.reference = 0;
+  ds.back.depthFailOp = VK_STENCIL_OP_KEEP;
+  ds.back.writeMask = 0;
+  ds.front = ds.back;
+
+  VkPipelineMultisampleStateCreateInfo ms = {};
+  ms.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+  ms.pNext = nullptr;
+  ms.flags = 0;
+  ms.pSampleMask = nullptr;
+  ms.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+  ms.sampleShadingEnable = VK_FALSE;
+  ms.alphaToCoverageEnable = VK_FALSE;
+  ms.alphaToOneEnable = VK_FALSE;
+  ms.minSampleShading = 0.0;
+
+  VkPipeline pipeline = {};
+  VkGraphicsPipelineCreateInfo pipeline_create_info = {};
+  pipeline_create_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+  pipeline_create_info.pNext = nullptr;
+  pipeline_create_info.layout = pipeline_layout;
+  pipeline_create_info.basePipelineHandle = VK_NULL_HANDLE;
+  pipeline_create_info.basePipelineIndex = 0;
+  pipeline_create_info.flags = 0;
+  pipeline_create_info.pVertexInputState = &vi;
+  pipeline_create_info.pInputAssemblyState = &ia;
+  pipeline_create_info.pRasterizationState = &rs;
+  pipeline_create_info.pColorBlendState = &cb;
+  pipeline_create_info.pTessellationState = nullptr;
+  pipeline_create_info.pMultisampleState = &ms;
+  pipeline_create_info.pDynamicState = &dynamic_create_info;
+  pipeline_create_info.pViewportState = &vp;
+  pipeline_create_info.pDepthStencilState = &ds;
+  pipeline_create_info.pStages = nullptr;
+  pipeline_create_info.stageCount = 0;
+  pipeline_create_info.renderPass = render_pass;
+  pipeline_create_info.subpass = 0;
+  //VK_CHECK(vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipeline_create_info, &callbacks, &pipeline));
+
+  VkClearValue clear_values_white[2] = {};
+  clear_values_white[0].color.float32[0] = 1.0f;
+  clear_values_white[0].color.float32[1] = 1.0f;
+  clear_values_white[0].color.float32[2] = 1.0f;
+  clear_values_white[0].color.float32[3] = 1.0f;
+  clear_values_white[1].depthStencil.depth = 1.0f;
+  clear_values_white[1].depthStencil.stencil = 0;
+
+  VkClearValue clear_values_black[2] = {};
+  clear_values_black[0].color.float32[0] = 0.0f;
+  clear_values_black[0].color.float32[1] = 0.0f;
+  clear_values_black[0].color.float32[2] = 0.0f;
+  clear_values_black[0].color.float32[3] = 0.0f;
+  clear_values_black[1].depthStencil.depth = 1.0f;
+  clear_values_black[1].depthStencil.stencil = 0;
   
+  VkSemaphore img_acq_sem = {};
+  VkSemaphoreCreateInfo sem_create_info = {};
+  sem_create_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+  VK_CHECK(vkCreateSemaphore(device, &sem_create_info, &callbacks, &img_acq_sem));
+
+  uint32_t current_buffer = {};
+  VK_CHECK(vkAcquireNextImageKHR(device, swapchain, UINT64_MAX, img_acq_sem, VK_NULL_HANDLE, &current_buffer)); // There's a bug here in the validation layer where if you did not get the swapchain images, you will crash!
+
+  VkRenderPassBeginInfo rp_begin = {};
+  rp_begin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+  rp_begin.pNext = nullptr;
+  rp_begin.renderPass = render_pass;
+  rp_begin.framebuffer = framebuffers[current_buffer];
+  rp_begin.renderArea.offset.x = 0;
+  rp_begin.renderArea.offset.y = 0;
+  rp_begin.renderArea.extent.width = 1264;
+  rp_begin.renderArea.extent.height = 681;
+  rp_begin.clearValueCount = 2;
+  rp_begin.pClearValues = clear_values_white;
+
+  VkCommandBufferBeginInfo cmd_buf_info = {};
+  cmd_buf_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+  cmd_buf_info.pNext = nullptr;
+  cmd_buf_info.flags = 0;
+  cmd_buf_info.pInheritanceInfo = nullptr;
+  VK_CHECK(vkBeginCommandBuffer(cmd_buffer, &cmd_buf_info));
+  //vkCmdBeginRenderPass(cmd_buffer, &rp_begin, VK_SUBPASS_CONTENTS_INLINE);
+  VK_CHECK(vkEndCommandBuffer(cmd_buffer));
+  //vkCmdBindPipeline(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+
+  VkDescriptorPoolSize type_count = {};
+  type_count.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+  type_count.descriptorCount = 1;
+
+  VkDescriptorPoolCreateInfo descriptor_pool = {};
+  descriptor_pool.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+  descriptor_pool.pNext = nullptr;
+  descriptor_pool.maxSets = 1;
+  descriptor_pool.poolSizeCount = 1;
+  descriptor_pool.pPoolSizes = &type_count;
+  VkDescriptorPool desc_pool = {};
+  VK_CHECK(vkCreateDescriptorPool(device, &descriptor_pool, &callbacks, &desc_pool));
+
+  VkDescriptorSetAllocateInfo desc_alloc_info = {};
+  desc_alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+  desc_alloc_info.pNext = nullptr;
+  desc_alloc_info.descriptorPool = desc_pool;
+  desc_alloc_info.descriptorSetCount = 1;
+  desc_alloc_info.pSetLayouts = &desc_layout;
+  VkDescriptorSet desc_set = {};
+  VK_CHECK(vkAllocateDescriptorSets(device, &desc_alloc_info, &desc_set));
+
+  VkWriteDescriptorSet writes = {};
+  writes.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+  writes.pNext = nullptr;
+  writes.dstSet = desc_set;
+  writes.descriptorCount = 1;
+  writes.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+  writes.pBufferInfo = &buffer_info;
+  writes.dstArrayElement = 0;
+  writes.dstBinding = 0;
+  vkUpdateDescriptorSets(device, 1, &writes, 0, nullptr);
+  //vkCmdBindDescriptorSets(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout, 0, 1, 
   MSG msg;
 
   while (BOOL message_result = GetMessage(&msg, NULL, 0, 0))
@@ -488,6 +713,7 @@ int main(int argc, char* argv[])
     }
   }
 
+  vkDestroyDescriptorPool(device, desc_pool, &callbacks);
   for (uint32_t i = 0; i < swapchain_image_count; ++i)
   {
     vkDestroyFramebuffer(device, framebuffers[i], &callbacks);
@@ -495,6 +721,8 @@ int main(int argc, char* argv[])
   vkDestroyRenderPass(device, render_pass, &callbacks);
   vkDestroySemaphore(device, img_acq_sem, &callbacks);
   vkFreeMemory(device, uniform_device_memory, &callbacks);
+  vkDestroyPipelineLayout(device, pipeline_layout, &callbacks);
+  vkDestroyDescriptorSetLayout(device, desc_layout, &callbacks);
   vkDestroyBuffer(device, uniform_buffer, &callbacks);
   vkDestroyImageView(device, depth_image_view, &callbacks);
   vkFreeMemory(device, depth_buffer_memory, &callbacks);
