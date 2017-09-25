@@ -235,7 +235,7 @@ int main(int argc, char* argv[])
   swapchain_create_info.imageColorSpace = surface_format.colorSpace;
   swapchain_create_info.imageExtent = surface_capabilities.currentExtent;
   swapchain_create_info.imageArrayLayers = 1;
-  swapchain_create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+  swapchain_create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
   swapchain_create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
   swapchain_create_info.queueFamilyIndexCount = 1;
   swapchain_create_info.pQueueFamilyIndices = &queue_family_index;
@@ -659,10 +659,6 @@ int main(int argc, char* argv[])
   cmd_buf_info.pNext = nullptr;
   cmd_buf_info.flags = 0;
   cmd_buf_info.pInheritanceInfo = nullptr;
-  VK_CHECK(vkBeginCommandBuffer(cmd_buffer, &cmd_buf_info));
-  //vkCmdBeginRenderPass(cmd_buffer, &rp_begin, VK_SUBPASS_CONTENTS_INLINE);
-  VK_CHECK(vkEndCommandBuffer(cmd_buffer));
-  //vkCmdBindPipeline(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 
   VkDescriptorPoolSize type_count = {};
   type_count.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
@@ -696,7 +692,25 @@ int main(int argc, char* argv[])
   writes.dstArrayElement = 0;
   writes.dstBinding = 0;
   vkUpdateDescriptorSets(device, 1, &writes, 0, nullptr);
-  //vkCmdBindDescriptorSets(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout, 0, 1, 
+
+  VkClearColorValue clear_color_value_black = {};
+  VkClearColorValue clear_color_value_white = {};
+  clear_color_value_white.float32[0] = 1.0f;
+  clear_color_value_white.float32[1] = 1.0f;
+  clear_color_value_white.float32[2] = 1.0f;
+  clear_color_value_white.float32[3] = 1.0f;
+
+  VkImageSubresourceRange swapchain_image_subresource_range = {};
+  swapchain_image_subresource_range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+  swapchain_image_subresource_range.baseMipLevel = 0;
+  swapchain_image_subresource_range.levelCount = 1;
+  swapchain_image_subresource_range.baseArrayLayer = 0;
+  swapchain_image_subresource_range.layerCount = 1;
+
+  // Set up the command buffer for flipping the framebuffers.
+  VK_CHECK(vkBeginCommandBuffer(cmd_buffer, &cmd_buf_info));
+  vkCmdClearColorImage(cmd_buffer, swapchain_images[0], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clear_color_value_white, 1, &swapchain_image_subresource_range);
+  VK_CHECK(vkEndCommandBuffer(cmd_buffer));
   MSG msg;
   bool running = true;
   int frame = 0;
@@ -707,7 +721,9 @@ int main(int argc, char* argv[])
     {
       printf("Frame %d\n", frame);
     }
+
     ++frame;
+
     while (BOOL message_result = PeekMessage(&msg, NULL, 0, 0, PM_REMOVE) != 0)
     {
       if (message_result == -1)
