@@ -698,18 +698,34 @@ int main(int argc, char* argv[])
   vkUpdateDescriptorSets(device, 1, &writes, 0, nullptr);
   //vkCmdBindDescriptorSets(cmd_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout, 0, 1, 
   MSG msg;
+  bool running = true;
+  int frame = 0;
 
-  while (BOOL message_result = GetMessage(&msg, NULL, 0, 0))
+  while (running)
   {
-    if (message_result == -1)
+    if (!(frame % (1024 * 100000)))
     {
-      // handle the error and possibly exit
-      break;
+      printf("Frame %d\n", frame);
     }
-    else
+    ++frame;
+    while (BOOL message_result = PeekMessage(&msg, NULL, 0, 0, PM_REMOVE) != 0)
     {
-      TranslateMessage(&msg);
-      DispatchMessage(&msg);
+      if (message_result == -1)
+      {
+        // handle the error and possibly exit
+        running = false;
+        break;
+      }
+      else if (msg.message == WM_QUIT)
+      {
+        running = false;
+        break;
+      }
+      else
+      {
+        TranslateMessage(&msg);
+        DispatchMessage(&msg);
+      }
     }
   }
 
