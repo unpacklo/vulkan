@@ -284,9 +284,9 @@ int main(int argc, char* argv[])
   cmd_buffer_alloc_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
   cmd_buffer_alloc_info.commandPool = cmd_pool;
   cmd_buffer_alloc_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-  cmd_buffer_alloc_info.commandBufferCount = 1;
-  VkCommandBuffer cmd_buffer = {};
-  VK_CHECK(vkAllocateCommandBuffers(device, &cmd_buffer_alloc_info, &cmd_buffer));
+  cmd_buffer_alloc_info.commandBufferCount = 2;
+  VkCommandBuffer clear_color_cmd[2] = {};
+  VK_CHECK(vkAllocateCommandBuffers(device, &cmd_buffer_alloc_info, clear_color_cmd));
 
   VkImageCreateInfo image_create_info = {};
   image_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -707,10 +707,41 @@ int main(int argc, char* argv[])
   swapchain_image_subresource_range.baseArrayLayer = 0;
   swapchain_image_subresource_range.layerCount = 1;
 
-  // Set up the command buffer for flipping the framebuffers.
-  VK_CHECK(vkBeginCommandBuffer(cmd_buffer, &cmd_buf_info));
-  vkCmdClearColorImage(cmd_buffer, swapchain_images[0], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clear_color_value_white, 1, &swapchain_image_subresource_range);
-  VK_CHECK(vkEndCommandBuffer(cmd_buffer));
+  // Set up the command buffer for clearing the framebuffers.
+  VK_CHECK(vkBeginCommandBuffer(clear_color_cmd[0], &cmd_buf_info));
+  vkCmdClearColorImage(clear_color_cmd[0], swapchain_images[0], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clear_color_value_white, 1, &swapchain_image_subresource_range);
+  VK_CHECK(vkEndCommandBuffer(clear_color_cmd[0]));
+  VK_CHECK(vkBeginCommandBuffer(clear_color_cmd[1], &cmd_buf_info));
+  vkCmdClearColorImage(clear_color_cmd[1], swapchain_images[1], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clear_color_value_black, 1, &swapchain_image_subresource_range);
+  VK_CHECK(vkEndCommandBuffer(clear_color_cmd[1]));
+
+  VkImageMemoryBarrier img_mem_barrier = {};
+  img_mem_barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+  img_mem_barrier.pNext = nullptr;
+  img_mem_barrier.srcAccessMask = VK_ACCESS_MEMORY_READ_BIT;
+  img_mem_barrier.dstAccessMask = 0;
+  img_mem_barrier.srcQueueFamilyIndex = queue_family_index;
+  img_mem_barrier.dstQueueFamilyIndex = queue_family_index;
+  img_mem_barrier.image = swapchain_images[0];
+  img_mem_barrier.subresourceRange = swapchain_image_subresource_range;
+  img_mem_barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+  img_mem_barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+
+  VkPresentInfoKHR present_info = {};
+  present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+  present_info.pNext = nullptr;
+  present_info.waitSemaphoreCount = 1;
+  present_info.pWaitSemaphores = &img_acq_sem;
+  present_info.swapchainCount = 1;
+  present_info.pSwapchains = &swapchain;
+  present_info.pImageIndices = &current_buffer;
+  present_info.pResults = nullptr;
+
+  VK_CHECK(vkQueuePresentKHR(queue, &present_info));
+  ++current_buffer;
+  current_buffer %= 2;
+
   MSG msg;
   bool running = true;
   int frame = 0;
@@ -723,6 +754,9 @@ int main(int argc, char* argv[])
     }
 
     ++frame;
+    VK_CHECK(vkQueuePresentKHR(queue, &present_info));
+    ++current_buffer;
+    current_buffer %= 2;
 
     while (BOOL message_result = PeekMessage(&msg, NULL, 0, 0, PM_REMOVE) != 0)
     {
