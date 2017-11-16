@@ -739,8 +739,6 @@ int main(int argc, char* argv[])
   present_info.pResults = nullptr;
 
   VK_CHECK(vkQueuePresentKHR(queue, &present_info));
-  ++current_buffer;
-  current_buffer %= 2;
 
   MSG msg;
   bool running = true;
@@ -754,9 +752,8 @@ int main(int argc, char* argv[])
     }
 
     ++frame;
-    VK_CHECK(vkQueuePresentKHR(queue, &present_info));
-    ++current_buffer;
-    current_buffer %= 2;
+    VK_CHECK(vkAcquireNextImageKHR(device, swapchain, 0, VK_NULL_HANDLE, VK_NULL_HANDLE, &current_buffer));
+    //VK_CHECK(vkQueuePresentKHR(queue, &present_info));
 
     while (BOOL message_result = PeekMessage(&msg, NULL, 0, 0, PM_REMOVE) != 0)
     {
