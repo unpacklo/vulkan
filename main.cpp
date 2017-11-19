@@ -204,7 +204,12 @@ int main(int argc, char* argv[])
   printf("Surface %#p supported: %s\n", surface, surface_supported == VK_TRUE ? "true" : "false");
   printf("\n");
 
-  uint32_t surface_formats_count = 32;
+  uint32_t surface_formats_count;
+  VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device, surface, &surface_formats_count, nullptr)); // WTF, Intel needs this function call to get the count first... is this a bug?
+  if (surface_formats_count > 32)
+  {
+    surface_formats_count = 32;
+  }
   VkSurfaceFormatKHR surface_formats[32] = {};
   VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device, surface, &surface_formats_count, surface_formats));
 
@@ -217,7 +222,12 @@ int main(int argc, char* argv[])
 
   VkSurfaceFormatKHR surface_format = surface_formats[0];
 
-  uint32_t present_modes_count = 32;
+  uint32_t present_modes_count;
+  VK_CHECK(vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device, surface, &present_modes_count, nullptr)); // WTF, Intel needs this function call to get the count first... is this a bug?
+  if (present_modes_count > 32)
+  {
+    present_modes_count = 32;
+  }
   VkPresentModeKHR present_modes[32] = {};
   VK_CHECK(vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device, surface, &present_modes_count, present_modes));
 
