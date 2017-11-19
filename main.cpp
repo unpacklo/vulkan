@@ -737,6 +737,9 @@ int main(int argc, char* argv[])
   img_mem_barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
   img_mem_barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
+  // Transition the image to a new layout.
+  // how is this call supposed to be made?
+  // vkCmdWaitEvents(clear_color_cmd[0], 0, nullptr, 
 
   VkPresentInfoKHR present_info = {};
   present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
