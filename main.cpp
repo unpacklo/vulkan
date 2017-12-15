@@ -717,27 +717,56 @@ int main(int argc, char* argv[])
   swapchain_image_subresource_range.baseArrayLayer = 0;
   swapchain_image_subresource_range.layerCount = 1;
 
+// typedef struct VkImageMemoryBarrier {
+//     VkStructureType            sType;
+//     const void*                pNext;
+//     VkAccessFlags              srcAccessMask;
+//     VkAccessFlags              dstAccessMask;
+//     VkImageLayout              oldLayout;
+//     VkImageLayout              newLayout;
+//     uint32_t                   srcQueueFamilyIndex;
+//     uint32_t                   dstQueueFamilyIndex;
+//     VkImage                    image;
+//     VkImageSubresourceRange    subresourceRange;
+// } VkImageMemoryBarrier;
+
   // Set up the image layout transition.
   VkImageMemoryBarrier img_mem_barrier = {};
   img_mem_barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
   img_mem_barrier.pNext = nullptr;
-  img_mem_barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-  img_mem_barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
   img_mem_barrier.srcQueueFamilyIndex = queue_family_index;
   img_mem_barrier.dstQueueFamilyIndex = queue_family_index;
-  img_mem_barrier.image = swapchain_images[0];
   img_mem_barrier.subresourceRange = swapchain_image_subresource_range;
-  img_mem_barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-  img_mem_barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
   // Set up the command buffer for clearing the framebuffers.
   VK_CHECK(vkBeginCommandBuffer(clear_color_cmd[0], &cmd_buf_info));
-  // Transition the image to a new layout.
+  img_mem_barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+  img_mem_barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+  img_mem_barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+  img_mem_barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+  img_mem_barrier.image = swapchain_images[0];
+  vkCmdPipelineBarrier(clear_color_cmd[0], VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, nullptr, 0, nullptr, 1, &img_mem_barrier);
   vkCmdClearColorImage(clear_color_cmd[0], swapchain_images[0], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clear_color_value_white, 1, &swapchain_image_subresource_range);
+  img_mem_barrier.srcAccessMask = 0;
+  img_mem_barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+  img_mem_barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+  img_mem_barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+  img_mem_barrier.image = swapchain_images[0];
   vkCmdPipelineBarrier(clear_color_cmd[0], VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, nullptr, 0, nullptr, 1, &img_mem_barrier);
   VK_CHECK(vkEndCommandBuffer(clear_color_cmd[0]));
+
   VK_CHECK(vkBeginCommandBuffer(clear_color_cmd[1], &cmd_buf_info));
+  img_mem_barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+  img_mem_barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+  img_mem_barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+  img_mem_barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+  img_mem_barrier.image = swapchain_images[1];
+  vkCmdPipelineBarrier(clear_color_cmd[1], VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, nullptr, 0, nullptr, 1, &img_mem_barrier);
   vkCmdClearColorImage(clear_color_cmd[1], swapchain_images[1], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clear_color_value_black, 1, &swapchain_image_subresource_range);
+  img_mem_barrier.srcAccessMask = 0;
+  img_mem_barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+  img_mem_barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+  img_mem_barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
   img_mem_barrier.image = swapchain_images[1];
   vkCmdPipelineBarrier(clear_color_cmd[1], VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, nullptr, 0, nullptr, 1, &img_mem_barrier);
   VK_CHECK(vkEndCommandBuffer(clear_color_cmd[1]));
@@ -756,15 +785,6 @@ int main(int argc, char* argv[])
   present_info.pImageIndices = &current_buffer;
   present_info.pResults = nullptr;
 
-  VkPipelineStageFlags wait_dst_stage_mask = VK_PIPELINE_STAGE_TRANSFER_BIT;
-  VkSubmitInfo submit_info = {};
-  submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-  submit_info.waitSemaphoreCount = 1;
-  submit_info.pWaitSemaphores = &img_acq_sem;
-  submit_info.pWaitDstStageMask = &wait_dst_stage_mask;
-  submit_info.commandBufferCount = 1;
-  submit_info.pCommandBuffers = clear_color_cmd;
-
 // typedef struct VkSubmitInfo {
 //     VkStructureType                sType;
 //     const void*                    pNext;
@@ -776,6 +796,16 @@ int main(int argc, char* argv[])
 //     uint32_t                       signalSemaphoreCount;
 //     const VkSemaphore*             pSignalSemaphores;
 // } VkSubmitInfo;
+
+  VkPipelineStageFlags wait_dst_stage_mask = VK_PIPELINE_STAGE_TRANSFER_BIT;
+  VkSubmitInfo submit_info = {};
+  submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+  submit_info.waitSemaphoreCount = 1;
+  submit_info.pWaitSemaphores = &img_acq_sem;
+  submit_info.pWaitDstStageMask = &wait_dst_stage_mask;
+  submit_info.commandBufferCount = 1;
+  submit_info.pCommandBuffers = clear_color_cmd;
+
   MSG msg;
   bool running = true;
   int frame = 0;
