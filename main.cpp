@@ -650,7 +650,7 @@ int main(int argc, char* argv[])
   VK_CHECK(vkCreateSemaphore(device, &sem_create_info, &callbacks, &img_acq_sem));
 
   uint32_t current_buffer = {};
-  VK_CHECK(vkAcquireNextImageKHR(device, swapchain, UINT64_MAX, img_acq_sem, VK_NULL_HANDLE, &current_buffer)); // There's a bug here in the validation layer where if you did not get the swapchain images, you will crash!
+  //VK_CHECK(vkAcquireNextImageKHR(device, swapchain, UINT64_MAX, img_acq_sem, VK_NULL_HANDLE, &current_buffer)); // There's a bug here in the validation layer where if you did not get the swapchain images, you will crash!
 
   VkRenderPassBeginInfo rp_begin = {};
   rp_begin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -717,19 +717,12 @@ int main(int argc, char* argv[])
   swapchain_image_subresource_range.baseArrayLayer = 0;
   swapchain_image_subresource_range.layerCount = 1;
 
-  // Set up the command buffer for clearing the framebuffers.
-  VK_CHECK(vkBeginCommandBuffer(clear_color_cmd[0], &cmd_buf_info));
-  vkCmdClearColorImage(clear_color_cmd[0], swapchain_images[0], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clear_color_value_white, 1, &swapchain_image_subresource_range);
-  VK_CHECK(vkEndCommandBuffer(clear_color_cmd[0]));
-  VK_CHECK(vkBeginCommandBuffer(clear_color_cmd[1], &cmd_buf_info));
-  vkCmdClearColorImage(clear_color_cmd[1], swapchain_images[1], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clear_color_value_black, 1, &swapchain_image_subresource_range);
-  VK_CHECK(vkEndCommandBuffer(clear_color_cmd[1]));
-
+  // Set up the image layout transition.
   VkImageMemoryBarrier img_mem_barrier = {};
   img_mem_barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
   img_mem_barrier.pNext = nullptr;
-  img_mem_barrier.srcAccessMask = VK_ACCESS_MEMORY_READ_BIT;
-  img_mem_barrier.dstAccessMask = 0;
+  img_mem_barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+  img_mem_barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
   img_mem_barrier.srcQueueFamilyIndex = queue_family_index;
   img_mem_barrier.dstQueueFamilyIndex = queue_family_index;
   img_mem_barrier.image = swapchain_images[0];
@@ -737,22 +730,52 @@ int main(int argc, char* argv[])
   img_mem_barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
   img_mem_barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
+  // Set up the command buffer for clearing the framebuffers.
+  VK_CHECK(vkBeginCommandBuffer(clear_color_cmd[0], &cmd_buf_info));
   // Transition the image to a new layout.
-  // how is this call supposed to be made?
-  // vkCmdWaitEvents(clear_color_cmd[0], 0, nullptr, 
+  vkCmdClearColorImage(clear_color_cmd[0], swapchain_images[0], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clear_color_value_white, 1, &swapchain_image_subresource_range);
+  vkCmdPipelineBarrier(clear_color_cmd[0], VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, nullptr, 0, nullptr, 1, &img_mem_barrier);
+  VK_CHECK(vkEndCommandBuffer(clear_color_cmd[0]));
+  VK_CHECK(vkBeginCommandBuffer(clear_color_cmd[1], &cmd_buf_info));
+  vkCmdClearColorImage(clear_color_cmd[1], swapchain_images[1], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clear_color_value_black, 1, &swapchain_image_subresource_range);
+  img_mem_barrier.image = swapchain_images[1];
+  vkCmdPipelineBarrier(clear_color_cmd[1], VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, nullptr, 0, nullptr, 1, &img_mem_barrier);
+  VK_CHECK(vkEndCommandBuffer(clear_color_cmd[1]));
 
   VkPresentInfoKHR present_info = {};
   present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
   present_info.pNext = nullptr;
-  present_info.waitSemaphoreCount = 1;
+  // This waitSemaphoreCount is zero because it appears that you can't
+  // have two separate batches of commands wait on the same semaphore
+  // (one will be waiting on nothing).  Figure out a better way to
+  // work with this.
+  present_info.waitSemaphoreCount = 0;
   present_info.pWaitSemaphores = &img_acq_sem;
   present_info.swapchainCount = 1;
   present_info.pSwapchains = &swapchain;
   present_info.pImageIndices = &current_buffer;
   present_info.pResults = nullptr;
 
-  VK_CHECK(vkQueuePresentKHR(queue, &present_info));
+  VkPipelineStageFlags wait_dst_stage_mask = VK_PIPELINE_STAGE_TRANSFER_BIT;
+  VkSubmitInfo submit_info = {};
+  submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+  submit_info.waitSemaphoreCount = 1;
+  submit_info.pWaitSemaphores = &img_acq_sem;
+  submit_info.pWaitDstStageMask = &wait_dst_stage_mask;
+  submit_info.commandBufferCount = 1;
+  submit_info.pCommandBuffers = clear_color_cmd;
 
+// typedef struct VkSubmitInfo {
+//     VkStructureType                sType;
+//     const void*                    pNext;
+//     uint32_t                       waitSemaphoreCount;
+//     const VkSemaphore*             pWaitSemaphores;
+//     const VkPipelineStageFlags*    pWaitDstStageMask;
+//     uint32_t                       commandBufferCount;
+//     const VkCommandBuffer*         pCommandBuffers;
+//     uint32_t                       signalSemaphoreCount;
+//     const VkSemaphore*             pSignalSemaphores;
+// } VkSubmitInfo;
   MSG msg;
   bool running = true;
   int frame = 0;
@@ -767,7 +790,9 @@ int main(int argc, char* argv[])
     ++frame;
     if (VK_SUCCESS == vkAcquireNextImageKHR(device, swapchain, 0, img_acq_sem, VK_NULL_HANDLE, &current_buffer))
     {
-      VK_CHECK(vkQueuePresentKHR(queue, &present_info));
+      submit_info.pCommandBuffers = clear_color_cmd + current_buffer;
+      VK_CHECK(vkQueueSubmit(queue, 1, &submit_info, VK_NULL_HANDLE)); // waits on img_acq_sem
+      VK_CHECK(vkQueuePresentKHR(queue, &present_info)); // also waits on img_acq_sem
     }
 
     while (BOOL message_result = PeekMessage(&msg, NULL, 0, 0, PM_REMOVE) != 0)
