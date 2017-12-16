@@ -674,6 +674,7 @@ int main(int argc, char* argv[])
   VkFence submit_fence = {};
   VkFenceCreateInfo fence_create_info = {};
   fence_create_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+  fence_create_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
   VK_CHECK(vkCreateFence(device, &fence_create_info, &callbacks, &submit_fence));
 
   uint32_t current_buffer = {};
@@ -857,10 +858,10 @@ int main(int argc, char* argv[])
     if (VK_SUCCESS == vkAcquireNextImageKHR(device, swapchain, 0, img_acq_sem, VK_NULL_HANDLE, &current_buffer))
     {
       submit_info.pCommandBuffers = clear_color_cmd + current_buffer;
-      VK_CHECK(vkQueueSubmit(queue, 1, &submit_info, submit_fence));
-      VK_CHECK(vkQueuePresentKHR(queue, &present_info));
       VK_CHECK(vkWaitForFences(device, 1, &submit_fence, VK_TRUE, UINT64_MAX));
       VK_CHECK(vkResetFences(device, 1, &submit_fence));
+      VK_CHECK(vkQueueSubmit(queue, 1, &submit_info, submit_fence));
+      VK_CHECK(vkQueuePresentKHR(queue, &present_info));
     }
 
     while (BOOL message_result = PeekMessage(&msg, NULL, 0, 0, PM_REMOVE) != 0)
@@ -883,6 +884,10 @@ int main(int argc, char* argv[])
       }
     }
   }
+
+  // Wait for the last submission to flush before destroying everything.
+  VK_CHECK(vkWaitForFences(device, 1, &submit_fence, VK_TRUE, UINT64_MAX));
+  VK_CHECK(vkResetFences(device, 1, &submit_fence));
 
   vkDestroyDescriptorPool(device, desc_pool, &callbacks);
   for (uint32_t i = 0; i < swapchain_image_count; ++i)
