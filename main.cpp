@@ -649,6 +649,17 @@ int main(int argc, char* argv[])
   sem_create_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
   VK_CHECK(vkCreateSemaphore(device, &sem_create_info, &callbacks, &img_acq_sem));
 
+// typedef struct VkFenceCreateInfo {
+//     VkStructureType       sType;
+//     const void*           pNext;
+//     VkFenceCreateFlags    flags;
+// } VkFenceCreateInfo;
+
+  VkFence submit_fence = {};
+  VkFenceCreateInfo fence_create_info = {};
+  fence_create_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+  VK_CHECK(vkCreateFence(device, &fence_create_info, &callbacks, &submit_fence));
+
   uint32_t current_buffer = {};
   //VK_CHECK(vkAcquireNextImageKHR(device, swapchain, UINT64_MAX, img_acq_sem, VK_NULL_HANDLE, &current_buffer)); // There's a bug here in the validation layer where if you did not get the swapchain images, you will crash!
 
@@ -821,8 +832,10 @@ int main(int argc, char* argv[])
     if (VK_SUCCESS == vkAcquireNextImageKHR(device, swapchain, 0, img_acq_sem, VK_NULL_HANDLE, &current_buffer))
     {
       submit_info.pCommandBuffers = clear_color_cmd + current_buffer;
-      VK_CHECK(vkQueueSubmit(queue, 1, &submit_info, VK_NULL_HANDLE)); // waits on img_acq_sem
+      VK_CHECK(vkQueueSubmit(queue, 1, &submit_info, submit_fence)); // waits on img_acq_sem
       VK_CHECK(vkQueuePresentKHR(queue, &present_info)); // also waits on img_acq_sem
+      VK_CHECK(vkWaitForFences(device, 1, &submit_fence, VK_TRUE, UINT64_MAX));
+      VK_CHECK(vkResetFences(device, 1, &submit_fence));
     }
 
     while (BOOL message_result = PeekMessage(&msg, NULL, 0, 0, PM_REMOVE) != 0)
@@ -852,6 +865,7 @@ int main(int argc, char* argv[])
     vkDestroyFramebuffer(device, framebuffers[i], &callbacks);
   }
   vkDestroyRenderPass(device, render_pass, &callbacks);
+  vkDestroyFence(device, submit_fence, &callbacks);
   vkDestroySemaphore(device, img_acq_sem, &callbacks);
   vkFreeMemory(device, uniform_device_memory, &callbacks);
   vkDestroyPipelineLayout(device, pipeline_layout, &callbacks);
