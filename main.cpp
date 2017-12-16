@@ -848,10 +848,10 @@ int main(int argc, char* argv[])
 
   while (running)
   {
-    if (!(frame % (1024 * 100000)))
-    {
-      printf("Frame %d\n", frame);
-    }
+    // if (!(frame % (1000)))
+    // {
+    //   printf("Frame %d\n", frame);
+    // }
 
     ++frame;
     if (VK_SUCCESS == vkAcquireNextImageKHR(device, swapchain, 0, img_acq_sem, VK_NULL_HANDLE, &current_buffer))
