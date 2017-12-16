@@ -798,20 +798,6 @@ int main(int argc, char* argv[])
   vkCmdPipelineBarrier(clear_color_cmd[1], VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, nullptr, 0, nullptr, 1, &img_mem_barrier);
   VK_CHECK(vkEndCommandBuffer(clear_color_cmd[1]));
 
-  VkPresentInfoKHR present_info = {};
-  present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-  present_info.pNext = nullptr;
-  // This waitSemaphoreCount is zero because it appears that you can't
-  // have two separate batches of commands wait on the same semaphore
-  // (one will be waiting on nothing).  Figure out a better way to
-  // work with this.
-  present_info.waitSemaphoreCount = 0;
-  present_info.pWaitSemaphores = &img_acq_sem;
-  present_info.swapchainCount = 1;
-  present_info.pSwapchains = &swapchain;
-  present_info.pImageIndices = &current_buffer;
-  present_info.pResults = nullptr;
-
 // typedef struct VkSubmitInfo {
 //     VkStructureType                sType;
 //     const void*                    pNext;
@@ -832,6 +818,29 @@ int main(int argc, char* argv[])
   submit_info.pWaitDstStageMask = &wait_dst_stage_mask;
   submit_info.commandBufferCount = 1;
   submit_info.pCommandBuffers = clear_color_cmd;
+  submit_info.signalSemaphoreCount = 1;
+  submit_info.pSignalSemaphores = &img_acq_sem;
+
+// typedef struct VkPresentInfoKHR {
+//     VkStructureType          sType;
+//     const void*              pNext;
+//     uint32_t                 waitSemaphoreCount;
+//     const VkSemaphore*       pWaitSemaphores;
+//     uint32_t                 swapchainCount;
+//     const VkSwapchainKHR*    pSwapchains;
+//     const uint32_t*          pImageIndices;
+//     VkResult*                pResults;
+// } VkPresentInfoKHR;
+
+  VkPresentInfoKHR present_info = {};
+  present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+  present_info.pNext = nullptr;
+  present_info.waitSemaphoreCount = 1;
+  present_info.pWaitSemaphores = &img_acq_sem;
+  present_info.swapchainCount = 1;
+  present_info.pSwapchains = &swapchain;
+  present_info.pImageIndices = &current_buffer;
+  present_info.pResults = nullptr;
 
   MSG msg;
   bool running = true;
@@ -848,8 +857,8 @@ int main(int argc, char* argv[])
     if (VK_SUCCESS == vkAcquireNextImageKHR(device, swapchain, 0, img_acq_sem, VK_NULL_HANDLE, &current_buffer))
     {
       submit_info.pCommandBuffers = clear_color_cmd + current_buffer;
-      VK_CHECK(vkQueueSubmit(queue, 1, &submit_info, submit_fence)); // waits on img_acq_sem
-      VK_CHECK(vkQueuePresentKHR(queue, &present_info)); // also waits on img_acq_sem
+      VK_CHECK(vkQueueSubmit(queue, 1, &submit_info, submit_fence));
+      VK_CHECK(vkQueuePresentKHR(queue, &present_info));
       VK_CHECK(vkWaitForFences(device, 1, &submit_fence, VK_TRUE, UINT64_MAX));
       VK_CHECK(vkResetFences(device, 1, &submit_fence));
     }
