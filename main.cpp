@@ -58,6 +58,22 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
     PostQuitMessage(0);
     return 0;
   }
+  case WM_KEYDOWN:
+  {
+    switch (wParam)
+    {
+    case VK_ESCAPE:
+    {
+      PostQuitMessage(0);
+      return 0;
+    }
+    default:
+    {
+      return DefWindowProc(hwnd, uMsg, wParam, lParam);
+    }
+    }
+    break;
+  }
   default:
   {
     return DefWindowProc(hwnd, uMsg, wParam, lParam);
@@ -884,6 +900,7 @@ int main(int argc, char* argv[])
   vkDestroyDevice(device, &callbacks);
   vkDestroyInstance(instance, &callbacks);
 
+  DestroyWindow(hwnd);
   getchar();
 
   return 0;
