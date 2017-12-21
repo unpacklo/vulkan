@@ -434,7 +434,16 @@ int main(int argc, char* argv[])
   VkDescriptorSetLayout desc_layout = {};
   VK_CHECK(vkCreateDescriptorSetLayout(device, &descriptor_layout, &callbacks, &desc_layout));
 
-  VkPipelineLayout pipeline_layout = {};
+// typedef struct VkPipelineLayoutCreateInfo {
+//     VkStructureType                 sType;
+//     const void*                     pNext;
+//     VkPipelineLayoutCreateFlags     flags;
+//     uint32_t                        setLayoutCount;
+//     const VkDescriptorSetLayout*    pSetLayouts;
+//     uint32_t                        pushConstantRangeCount;
+//     const VkPushConstantRange*      pPushConstantRanges;
+// } VkPipelineLayoutCreateInfo;
+
   VkPipelineLayoutCreateInfo pipeline_layout_create_info = {};
   pipeline_layout_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
   pipeline_layout_create_info.pNext = nullptr;
@@ -442,7 +451,20 @@ int main(int argc, char* argv[])
   pipeline_layout_create_info.pPushConstantRanges = nullptr;
   pipeline_layout_create_info.setLayoutCount = 1;
   pipeline_layout_create_info.pSetLayouts = &desc_layout;
+  VkPipelineLayout pipeline_layout = {};
   VK_CHECK(vkCreatePipelineLayout(device, &pipeline_layout_create_info, &callbacks, &pipeline_layout));
+
+// typedef struct VkAttachmentDescription {
+//     VkAttachmentDescriptionFlags    flags;
+//     VkFormat                        format;
+//     VkSampleCountFlagBits           samples;
+//     VkAttachmentLoadOp              loadOp;
+//     VkAttachmentStoreOp             storeOp;
+//     VkAttachmentLoadOp              stencilLoadOp;
+//     VkAttachmentStoreOp             stencilStoreOp;
+//     VkImageLayout                   initialLayout;
+//     VkImageLayout                   finalLayout;
+// } VkAttachmentDescription;
 
   VkAttachmentDescription attachments[2] = {};
   attachments[0].format = surface_format.format;
@@ -463,6 +485,11 @@ int main(int argc, char* argv[])
   attachments[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
   attachments[1].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
+// typedef struct VkAttachmentReference {
+//     uint32_t         attachment;
+//     VkImageLayout    layout;
+// } VkAttachmentReference;
+
   VkAttachmentReference color_reference = {};
   color_reference.attachment = 0;
   color_reference.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
@@ -470,6 +497,19 @@ int main(int argc, char* argv[])
   VkAttachmentReference depth_reference = {};
   depth_reference.attachment = 1;
   depth_reference.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+// typedef struct VkSubpassDescription {
+//     VkSubpassDescriptionFlags       flags;
+//     VkPipelineBindPoint             pipelineBindPoint;
+//     uint32_t                        inputAttachmentCount;
+//     const VkAttachmentReference*    pInputAttachments;
+//     uint32_t                        colorAttachmentCount;
+//     const VkAttachmentReference*    pColorAttachments;
+//     const VkAttachmentReference*    pResolveAttachments;
+//     const VkAttachmentReference*    pDepthStencilAttachment;
+//     uint32_t                        preserveAttachmentCount;
+//     const uint32_t*                 pPreserveAttachments;
+// } VkSubpassDescription;
 
   VkSubpassDescription subpass = {};
   subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
@@ -482,6 +522,28 @@ int main(int argc, char* argv[])
   subpass.pDepthStencilAttachment = &depth_reference;
   subpass.preserveAttachmentCount = 0;
   subpass.pPreserveAttachments = nullptr;
+
+// typedef struct VkRenderPassCreateInfo {
+//     VkStructureType                   sType;
+//     const void*                       pNext;
+//     VkRenderPassCreateFlags           flags;
+//     uint32_t                          attachmentCount;
+//     const VkAttachmentDescription*    pAttachments;
+//     uint32_t                          subpassCount;
+//     const VkSubpassDescription*       pSubpasses;
+//     uint32_t                          dependencyCount;
+//     const VkSubpassDependency*        pDependencies;
+// } VkRenderPassCreateInfo;
+
+// typedef struct VkSubpassDependency {
+//     uint32_t                srcSubpass;
+//     uint32_t                dstSubpass;
+//     VkPipelineStageFlags    srcStageMask;
+//     VkPipelineStageFlags    dstStageMask;
+//     VkAccessFlags           srcAccessMask;
+//     VkAccessFlags           dstAccessMask;
+//     VkDependencyFlags       dependencyFlags;
+// } VkSubpassDependency;
 
   VkRenderPassCreateInfo rp_info = {};
   rp_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
