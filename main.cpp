@@ -560,6 +560,18 @@ int main(int argc, char* argv[])
   VkImageView framebuffer_attachments[2] = {};
   framebuffer_attachments[1] = depth_image_view;
 
+// typedef struct VkFramebufferCreateInfo {
+//     VkStructureType             sType;
+//     const void*                 pNext;
+//     VkFramebufferCreateFlags    flags;
+//     VkRenderPass                renderPass;
+//     uint32_t                    attachmentCount;
+//     const VkImageView*          pAttachments;
+//     uint32_t                    width;
+//     uint32_t                    height;
+//     uint32_t                    layers;
+// } VkFramebufferCreateInfo;
+
   VkFramebufferCreateInfo fb_info = {};
   fb_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
   fb_info.pNext = nullptr;
@@ -578,12 +590,30 @@ int main(int argc, char* argv[])
     VK_CHECK(vkCreateFramebuffer(device, &fb_info, &callbacks, framebuffers + i));
   }
 
+// typedef struct VkPipelineDynamicStateCreateInfo {
+//     VkStructureType                      sType;
+//     const void*                          pNext;
+//     VkPipelineDynamicStateCreateFlags    flags;
+//     uint32_t                             dynamicStateCount;
+//     const VkDynamicState*                pDynamicStates;
+// } VkPipelineDynamicStateCreateInfo;
+
   VkDynamicState dynamic_state_enables[VK_DYNAMIC_STATE_RANGE_SIZE] = {};
   VkPipelineDynamicStateCreateInfo dynamic_create_info = {};
   dynamic_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
   dynamic_create_info.pNext = nullptr;
   dynamic_create_info.pDynamicStates = dynamic_state_enables;
   dynamic_create_info.dynamicStateCount = 0;
+
+// typedef struct VkPipelineVertexInputStateCreateInfo {
+//     VkStructureType                             sType;
+//     const void*                                 pNext;
+//     VkPipelineVertexInputStateCreateFlags       flags;
+//     uint32_t                                    vertexBindingDescriptionCount;
+//     const VkVertexInputBindingDescription*      pVertexBindingDescriptions;
+//     uint32_t                                    vertexAttributeDescriptionCount;
+//     const VkVertexInputAttributeDescription*    pVertexAttributeDescriptions;
+// } VkPipelineVertexInputStateCreateInfo;
 
   VkVertexInputBindingDescription vi_binding = {};
   VkVertexInputAttributeDescription vi_attribs[2] = {};
@@ -596,12 +626,36 @@ int main(int argc, char* argv[])
   vi.vertexAttributeDescriptionCount = 2;
   vi.pVertexAttributeDescriptions = vi_attribs;
 
+// typedef struct VkPipelineInputAssemblyStateCreateInfo {
+//     VkStructureType                            sType;
+//     const void*                                pNext;
+//     VkPipelineInputAssemblyStateCreateFlags    flags;
+//     VkPrimitiveTopology                        topology;
+//     VkBool32                                   primitiveRestartEnable;
+// } VkPipelineInputAssemblyStateCreateInfo;
+
   VkPipelineInputAssemblyStateCreateInfo ia = {};
   ia.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
   ia.pNext = nullptr;
   ia.flags = 0;
   ia.primitiveRestartEnable = VK_FALSE;
   ia.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+
+// typedef struct VkPipelineRasterizationStateCreateInfo {
+//     VkStructureType                            sType;
+//     const void*                                pNext;
+//     VkPipelineRasterizationStateCreateFlags    flags;
+//     VkBool32                                   depthClampEnable;
+//     VkBool32                                   rasterizerDiscardEnable;
+//     VkPolygonMode                              polygonMode;
+//     VkCullModeFlags                            cullMode;
+//     VkFrontFace                                frontFace;
+//     VkBool32                                   depthBiasEnable;
+//     float                                      depthBiasConstantFactor;
+//     float                                      depthBiasClamp;
+//     float                                      depthBiasSlopeFactor;
+//     float                                      lineWidth;
+// } VkPipelineRasterizationStateCreateInfo;
 
   VkPipelineRasterizationStateCreateInfo rs = {};
   rs.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
@@ -618,10 +672,32 @@ int main(int argc, char* argv[])
   rs.depthBiasSlopeFactor = 0;
   rs.lineWidth = 1.0f;
 
+// typedef struct VkPipelineColorBlendStateCreateInfo {
+//     VkStructureType                               sType;
+//     const void*                                   pNext;
+//     VkPipelineColorBlendStateCreateFlags          flags;
+//     VkBool32                                      logicOpEnable;
+//     VkLogicOp                                     logicOp;
+//     uint32_t                                      attachmentCount;
+//     const VkPipelineColorBlendAttachmentState*    pAttachments;
+//     float                                         blendConstants[4];
+// } VkPipelineColorBlendStateCreateInfo;
+
   VkPipelineColorBlendStateCreateInfo cb = {};
   cb.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
   cb.pNext = nullptr;
   cb.flags = 0;
+
+// typedef struct VkPipelineColorBlendStateCreateInfo {
+//     VkStructureType                               sType;
+//     const void*                                   pNext;
+//     VkPipelineColorBlendStateCreateFlags          flags;
+//     VkBool32                                      logicOpEnable;
+//     VkLogicOp                                     logicOp;
+//     uint32_t                                      attachmentCount;
+//     const VkPipelineColorBlendAttachmentState*    pAttachments;
+//     float                                         blendConstants[4];
+// } VkPipelineColorBlendStateCreateInfo;
 
   VkPipelineColorBlendAttachmentState att_state[1] = {};
   att_state[0].colorWriteMask = 0xf;
@@ -641,6 +717,16 @@ int main(int argc, char* argv[])
   cb.blendConstants[2] = 1.0f;
   cb.blendConstants[3] = 1.0f;
 
+// typedef struct VkPipelineViewportStateCreateInfo {
+//     VkStructureType                       sType;
+//     const void*                           pNext;
+//     VkPipelineViewportStateCreateFlags    flags;
+//     uint32_t                              viewportCount;
+//     const VkViewport*                     pViewports;
+//     uint32_t                              scissorCount;
+//     const VkRect2D*                       pScissors;
+// } VkPipelineViewportStateCreateInfo;
+
   VkPipelineViewportStateCreateInfo vp = {};
   vp.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
   vp.pNext = nullptr;
@@ -651,6 +737,21 @@ int main(int argc, char* argv[])
   dynamic_state_enables[dynamic_create_info.dynamicStateCount++] = VK_DYNAMIC_STATE_SCISSOR;
   vp.pScissors = nullptr;
   vp.pViewports = nullptr;
+
+// typedef struct VkPipelineDepthStencilStateCreateInfo {
+//     VkStructureType                           sType;
+//     const void*                               pNext;
+//     VkPipelineDepthStencilStateCreateFlags    flags;
+//     VkBool32                                  depthTestEnable;
+//     VkBool32                                  depthWriteEnable;
+//     VkCompareOp                               depthCompareOp;
+//     VkBool32                                  depthBoundsTestEnable;
+//     VkBool32                                  stencilTestEnable;
+//     VkStencilOpState                          front;
+//     VkStencilOpState                          back;
+//     float                                     minDepthBounds;
+//     float                                     maxDepthBounds;
+// } VkPipelineDepthStencilStateCreateInfo;
 
   VkPipelineDepthStencilStateCreateInfo ds = {};
   ds.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
@@ -672,6 +773,18 @@ int main(int argc, char* argv[])
   ds.back.writeMask = 0;
   ds.front = ds.back;
 
+// typedef struct VkPipelineMultisampleStateCreateInfo {
+//     VkStructureType                          sType;
+//     const void*                              pNext;
+//     VkPipelineMultisampleStateCreateFlags    flags;
+//     VkSampleCountFlagBits                    rasterizationSamples;
+//     VkBool32                                 sampleShadingEnable;
+//     float                                    minSampleShading;
+//     const VkSampleMask*                      pSampleMask;
+//     VkBool32                                 alphaToCoverageEnable;
+//     VkBool32                                 alphaToOneEnable;
+// } VkPipelineMultisampleStateCreateInfo;
+
   VkPipelineMultisampleStateCreateInfo ms = {};
   ms.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
   ms.pNext = nullptr;
@@ -682,6 +795,28 @@ int main(int argc, char* argv[])
   ms.alphaToCoverageEnable = VK_FALSE;
   ms.alphaToOneEnable = VK_FALSE;
   ms.minSampleShading = 0.0;
+
+// typedef struct VkGraphicsPipelineCreateInfo {
+//     VkStructureType                                  sType;
+//     const void*                                      pNext;
+//     VkPipelineCreateFlags                            flags;
+//     uint32_t                                         stageCount;
+//     const VkPipelineShaderStageCreateInfo*           pStages;
+//     const VkPipelineVertexInputStateCreateInfo*      pVertexInputState;
+//     const VkPipelineInputAssemblyStateCreateInfo*    pInputAssemblyState;
+//     const VkPipelineTessellationStateCreateInfo*     pTessellationState;
+//     const VkPipelineViewportStateCreateInfo*         pViewportState;
+//     const VkPipelineRasterizationStateCreateInfo*    pRasterizationState;
+//     const VkPipelineMultisampleStateCreateInfo*      pMultisampleState;
+//     const VkPipelineDepthStencilStateCreateInfo*     pDepthStencilState;
+//     const VkPipelineColorBlendStateCreateInfo*       pColorBlendState;
+//     const VkPipelineDynamicStateCreateInfo*          pDynamicState;
+//     VkPipelineLayout                                 layout;
+//     VkRenderPass                                     renderPass;
+//     uint32_t                                         subpass;
+//     VkPipeline                                       basePipelineHandle;
+//     int32_t                                          basePipelineIndex;
+// } VkGraphicsPipelineCreateInfo;
 
   VkPipeline pipeline = {};
   VkGraphicsPipelineCreateInfo pipeline_create_info = {};
