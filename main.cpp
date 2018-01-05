@@ -1,3 +1,4 @@
+#define _CRT_SECURE_NO_WARNINGS
 #include <cstdio>
 #include <cstdlib>
 #include <malloc.h>
@@ -6,6 +7,21 @@
 #include <vulkan/vulkan.h>
 #include <Windows.h>
 #include <tchar.h>
+
+void* Alloc(size_t bytes, size_t alignment = 1)
+{
+  return _aligned_malloc(bytes, alignment);
+}
+
+void* Realloc(void* ptr, size_t bytes, size_t alignment = 1)
+{
+  return _aligned_realloc(ptr, bytes, alignment);
+}
+
+void Free(void* ptr)
+{
+  _aligned_free(ptr);
+}
 
 void* VulkanAlignedAlloc(void* userdata, size_t bytes, size_t alignment, VkSystemAllocationScope alloc_scope)
 {
@@ -19,7 +35,7 @@ void* VulkanRealloc(void* userdata, void* ptr, size_t bytes, size_t alignment, V
 
 void VulkanFree(void* userdata, void* ptr)
 {
-  return _aligned_free(ptr);
+  _aligned_free(ptr);
 }
 
 void VulkanInternalAllocNotify(void* userdata, size_t bytes, VkInternalAllocationType alloc_type, VkSystemAllocationScope alloc_scope)
@@ -85,6 +101,56 @@ struct Mat4
 {
   float m[16];
 };
+
+struct Buffer
+{
+  char* data;
+  size_t bytes;
+};
+
+void BufferDestroy(Buffer* buffer)
+{
+  Free(buffer->data);
+  buffer->data = nullptr;
+  buffer->bytes = 0;
+}
+
+void BufferCreate(Buffer* buffer, size_t bytes, size_t alignment = 1)
+{
+  BufferDestroy(buffer);
+  buffer->data = (char*)Alloc(bytes, alignment);
+  buffer->bytes = bytes;
+}
+
+bool ReadBinaryFile(Buffer* file_contents, const char* path)
+{
+  FILE* file = fopen(path, "rb");
+
+  if (file)
+  {
+    if (!fseek(file, 0, SEEK_END))
+    {
+      long int pos = ftell(file);
+
+      if ((pos >= 0) && !fseek(file, 0, SEEK_SET))
+      {
+        BufferCreate(file_contents, pos);
+        size_t count = fread(file_contents->data, pos, 1, file);
+
+        if (count == 1)
+        {
+          return true;
+        }
+        else
+        {
+          BufferDestroy(file_contents);
+        }
+      }
+    }
+  }
+
+  return false;
+}
 
 int main(int argc, char* argv[])
 {
@@ -623,7 +689,7 @@ int main(int argc, char* argv[])
   vi.flags = 0;
   vi.vertexBindingDescriptionCount = 1;
   vi.pVertexBindingDescriptions = &vi_binding;
-  vi.vertexAttributeDescriptionCount = 2;
+  vi.vertexAttributeDescriptionCount = 0; // fix me
   vi.pVertexAttributeDescriptions = vi_attribs;
 
 // typedef struct VkPipelineInputAssemblyStateCreateInfo {
@@ -796,6 +862,47 @@ int main(int argc, char* argv[])
   ms.alphaToOneEnable = VK_FALSE;
   ms.minSampleShading = 0.0;
 
+  Buffer vertex_shader_code = {};
+  if (!ReadBinaryFile(&vertex_shader_code, "basic-vert.spv"))
+  {
+    printf("Could not read vertex shader SPIR-V code!\n");
+  }
+// typedef struct VkShaderModuleCreateInfo {
+//     VkStructureType              sType;
+//     const void*                  pNext;
+//     VkShaderModuleCreateFlags    flags;
+//     size_t                       codeSize;
+//     const uint32_t*              pCode;
+// } VkShaderModuleCreateInfo;
+
+  VkShaderModuleCreateInfo shader_module_create_info = {};
+  shader_module_create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+  shader_module_create_info.codeSize = vertex_shader_code.bytes;
+  shader_module_create_info.pCode = (uint32_t*)vertex_shader_code.data;
+
+  // Need to create a shader module first before trying to set up the
+  // shader stage for the pipeline...
+  VkShaderModule vertex_module = {};
+
+  VK_CHECK(vkCreateShaderModule(device, &shader_module_create_info, &callbacks, &vertex_module));
+
+// We need this shader stage create info to create a graphics pipeline.
+// typedef struct VkPipelineShaderStageCreateInfo {
+//     VkStructureType                     sType;
+//     const void*                         pNext;
+//     VkPipelineShaderStageCreateFlags    flags;
+//     VkShaderStageFlagBits               stage;
+//     VkShaderModule                      module;
+//     const char*                         pName;
+//     const VkSpecializationInfo*         pSpecializationInfo;
+// } VkPipelineShaderStageCreateInfo;
+
+  VkPipelineShaderStageCreateInfo vertex_shader_stage_create_info = {};
+  vertex_shader_stage_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+  vertex_shader_stage_create_info.stage = VK_SHADER_STAGE_VERTEX_BIT;
+  vertex_shader_stage_create_info.module = vertex_module;
+  vertex_shader_stage_create_info.pName = "main";
+
 // typedef struct VkGraphicsPipelineCreateInfo {
 //     VkStructureType                                  sType;
 //     const void*                                      pNext;
@@ -835,11 +942,11 @@ int main(int argc, char* argv[])
   pipeline_create_info.pDynamicState = &dynamic_create_info;
   pipeline_create_info.pViewportState = &vp;
   pipeline_create_info.pDepthStencilState = &ds;
-  pipeline_create_info.pStages = nullptr;
-  pipeline_create_info.stageCount = 0;
+  pipeline_create_info.pStages = &vertex_shader_stage_create_info;
+  pipeline_create_info.stageCount = 1;
   pipeline_create_info.renderPass = render_pass;
   pipeline_create_info.subpass = 0;
-  //VK_CHECK(vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipeline_create_info, &callbacks, &pipeline));
+  VK_CHECK(vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipeline_create_info, &callbacks, &pipeline));
 
   VkClearValue clear_values_white[2] = {};
   clear_values_white[0].color.float32[0] = 1.0f;
@@ -875,7 +982,6 @@ int main(int argc, char* argv[])
   VK_CHECK(vkCreateFence(device, &fence_create_info, &callbacks, &submit_fence));
 
   uint32_t current_buffer = {};
-  //VK_CHECK(vkAcquireNextImageKHR(device, swapchain, UINT64_MAX, img_acq_sem, VK_NULL_HANDLE, &current_buffer)); // There's a bug here in the validation layer where if you did not get the swapchain images, you will crash!
 
   VkRenderPassBeginInfo rp_begin = {};
   rp_begin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -1087,6 +1193,8 @@ int main(int argc, char* argv[])
   VK_CHECK(vkResetFences(device, 1, &submit_fence));
 
   vkDestroyDescriptorPool(device, desc_pool, &callbacks);
+  vkDestroyPipeline(device, pipeline, &callbacks);
+  vkDestroyShaderModule(device, vertex_module, &callbacks);
   for (uint32_t i = 0; i < swapchain_image_count; ++i)
   {
     vkDestroyFramebuffer(device, framebuffers[i], &callbacks);
