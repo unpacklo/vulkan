@@ -885,6 +885,7 @@ int main(int argc, char* argv[])
   VkShaderModule vertex_module = {};
 
   VK_CHECK(vkCreateShaderModule(device, &shader_module_create_info, &callbacks, &vertex_module));
+  BufferDestroy(&vertex_shader_code);
 
 // We need this shader stage create info to create a graphics pipeline.
 // typedef struct VkPipelineShaderStageCreateInfo {
