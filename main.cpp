@@ -948,6 +948,7 @@ int main(int argc, char* argv[])
   pipeline_create_info.renderPass = render_pass;
   pipeline_create_info.subpass = 0;
   VK_CHECK(vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipeline_create_info, &callbacks, &pipeline));
+  vkDestroyShaderModule(device, vertex_module, &callbacks); // "A shader module can be destroyed while pipelines created using its shaders are still in use."
 
   VkClearValue clear_values_white[2] = {};
   clear_values_white[0].color.float32[0] = 1.0f;
@@ -1195,7 +1196,7 @@ int main(int argc, char* argv[])
 
   vkDestroyDescriptorPool(device, desc_pool, &callbacks);
   vkDestroyPipeline(device, pipeline, &callbacks);
-  vkDestroyShaderModule(device, vertex_module, &callbacks);
+
   for (uint32_t i = 0; i < swapchain_image_count; ++i)
   {
     vkDestroyFramebuffer(device, framebuffers[i], &callbacks);
