@@ -152,6 +152,13 @@ bool ReadBinaryFile(Buffer* file_contents, const char* path)
   return false;
 }
 
+static const float s_ClipSpaceTriangle[] =
+{
+  -1.0f, -0.5f, 0.0f, 1.0f,
+  1.0f, -0.5f, 0.0f, 1.0f,
+  0.0f, 1.0f, 0.0f, 1.0f,
+};
+
 int main(int argc, char* argv[])
 {
   printf("Vulkan header version: %u\n", VK_HEADER_VERSION);
@@ -438,7 +445,7 @@ int main(int argc, char* argv[])
   VkBufferCreateInfo buffer_create_info = {};
   buffer_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   buffer_create_info.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-  buffer_create_info.size = sizeof(Mat4);
+  buffer_create_info.size = sizeof(s_ClipSpaceTriangle);
   buffer_create_info.queueFamilyIndexCount = 0;
   buffer_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
   VkBuffer uniform_buffer = {};
@@ -469,12 +476,7 @@ int main(int argc, char* argv[])
   uint8_t* mapped_uniform_data = NULL;
   VK_CHECK(vkMapMemory(device, uniform_device_memory, 0, memory_requirements.size, 0, (void**)&mapped_uniform_data));
 
-  Mat4 mvp = {};
-  mvp.m[0] = 1.0f;
-  mvp.m[5] = 1.0f;
-  mvp.m[10] = 1.0f;
-  mvp.m[15] = 1.0f;
-  memmove(mapped_uniform_data, &mvp, sizeof(mvp));
+  memmove(mapped_uniform_data, s_ClipSpaceTriangle, sizeof(s_ClipSpaceTriangle));
   vkUnmapMemory(device, uniform_device_memory);
 
   VK_CHECK(vkBindBufferMemory(device, uniform_buffer, uniform_device_memory, 0));
@@ -482,7 +484,7 @@ int main(int argc, char* argv[])
   VkDescriptorBufferInfo buffer_info = {};
   buffer_info.buffer = uniform_buffer;
   buffer_info.offset = 0;
-  buffer_info.range = sizeof(mvp);
+  buffer_info.range = sizeof(s_ClipSpaceTriangle);
 
   VkDescriptorSetLayoutBinding layout_binding = {};
   layout_binding.binding = 0;
@@ -863,7 +865,7 @@ int main(int argc, char* argv[])
   ms.minSampleShading = 0.0;
 
   Buffer vertex_shader_code = {};
-  if (!ReadBinaryFile(&vertex_shader_code, "basic-vert.spv"))
+  if (!ReadBinaryFile(&vertex_shader_code, "basic.vert.spv"))
   {
     printf("Could not read vertex shader SPIR-V code!\n");
   }
