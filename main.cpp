@@ -155,8 +155,8 @@ bool ReadBinaryFile(Buffer* file_contents, const char* path)
 static const float s_ClipSpaceTriangleVerts[] =
 {
   0.0f, 1.0f, 0.0f, 1.0f,
-  1.0f, -0.5f, 0.0f, 1.0f,
-  -1.0f, -0.5f, 0.0f, 1.0f,
+  1.0f, -1.0f, 0.0f, 1.0f,
+  -1.0f, -1.0f, 0.0f, 1.0f,
 };
 
 static const float s_ClipSpaceTriangleColors[] =
