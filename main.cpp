@@ -152,11 +152,18 @@ bool ReadBinaryFile(Buffer* file_contents, const char* path)
   return false;
 }
 
-static const float s_ClipSpaceTriangle[] =
+static const float s_ClipSpaceTriangleVerts[] =
 {
   -1.0f, -0.5f, 0.0f, 1.0f,
   1.0f, -0.5f, 0.0f, 1.0f,
   0.0f, 1.0f, 0.0f, 1.0f,
+};
+
+static const float s_ClipSpaceTriangleColors[] =
+{
+  1.0f, 0.0f, 0.0f, 1.0f,
+  0.0f, 1.0f, 0.0f, 1.0f,
+  0.0f, 0.0f, 1.0f, 1.0f,
 };
 
 int main(int argc, char* argv[])
@@ -384,8 +391,8 @@ int main(int argc, char* argv[])
   cmd_buffer_alloc_info.commandPool = cmd_pool;
   cmd_buffer_alloc_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
   cmd_buffer_alloc_info.commandBufferCount = 2;
-  VkCommandBuffer clear_color_cmd[2] = {};
-  VK_CHECK(vkAllocateCommandBuffers(device, &cmd_buffer_alloc_info, clear_color_cmd));
+  VkCommandBuffer draw_cmd[2] = {};
+  VK_CHECK(vkAllocateCommandBuffers(device, &cmd_buffer_alloc_info, draw_cmd));
 
   VkImageCreateInfo image_create_info = {};
   image_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -445,7 +452,7 @@ int main(int argc, char* argv[])
   VkBufferCreateInfo buffer_create_info = {};
   buffer_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   buffer_create_info.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-  buffer_create_info.size = sizeof(s_ClipSpaceTriangle);
+  buffer_create_info.size = sizeof(s_ClipSpaceTriangleVerts) + sizeof(s_ClipSpaceTriangleColors);
   buffer_create_info.queueFamilyIndexCount = 0;
   buffer_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
   VkBuffer uniform_buffer = {};
@@ -476,7 +483,8 @@ int main(int argc, char* argv[])
   uint8_t* mapped_uniform_data = NULL;
   VK_CHECK(vkMapMemory(device, uniform_device_memory, 0, memory_requirements.size, 0, (void**)&mapped_uniform_data));
 
-  memmove(mapped_uniform_data, s_ClipSpaceTriangle, sizeof(s_ClipSpaceTriangle));
+  memmove(mapped_uniform_data, s_ClipSpaceTriangleVerts, sizeof(s_ClipSpaceTriangleVerts));
+  memmove(mapped_uniform_data + sizeof(s_ClipSpaceTriangleVerts), s_ClipSpaceTriangleColors, sizeof(s_ClipSpaceTriangleColors));
   vkUnmapMemory(device, uniform_device_memory);
 
   VK_CHECK(vkBindBufferMemory(device, uniform_buffer, uniform_device_memory, 0));
@@ -484,7 +492,7 @@ int main(int argc, char* argv[])
   VkDescriptorBufferInfo buffer_info = {};
   buffer_info.buffer = uniform_buffer;
   buffer_info.offset = 0;
-  buffer_info.range = sizeof(s_ClipSpaceTriangle);
+  buffer_info.range = sizeof(s_ClipSpaceTriangleVerts) + sizeof(s_ClipSpaceTriangleColors);
 
   VkDescriptorSetLayoutBinding layout_binding = {};
   layout_binding.binding = 0;
@@ -865,10 +873,17 @@ int main(int argc, char* argv[])
   ms.minSampleShading = 0.0;
 
   Buffer vertex_shader_code = {};
+  Buffer frag_shader_code = {};
   if (!ReadBinaryFile(&vertex_shader_code, "basic.vert.spv"))
   {
     printf("Could not read vertex shader SPIR-V code!\n");
   }
+
+  if (!ReadBinaryFile(&frag_shader_code, "basic.frag.spv"))
+  {
+    printf("Could not read frag shader SPIR-V code!\n");
+  }
+
 // typedef struct VkShaderModuleCreateInfo {
 //     VkStructureType              sType;
 //     const void*                  pNext;
@@ -877,17 +892,24 @@ int main(int argc, char* argv[])
 //     const uint32_t*              pCode;
 // } VkShaderModuleCreateInfo;
 
-  VkShaderModuleCreateInfo shader_module_create_info = {};
-  shader_module_create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-  shader_module_create_info.codeSize = vertex_shader_code.bytes;
-  shader_module_create_info.pCode = (uint32_t*)vertex_shader_code.data;
+  VkShaderModuleCreateInfo shader_module_create_info[2] = {};
+  shader_module_create_info[0].sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+  shader_module_create_info[0].codeSize = vertex_shader_code.bytes;
+  shader_module_create_info[0].pCode = (uint32_t*)vertex_shader_code.data;
+  shader_module_create_info[1].sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+  shader_module_create_info[1].codeSize = frag_shader_code.bytes;
+  shader_module_create_info[1].pCode = (uint32_t*)frag_shader_code.data;
 
   // Need to create a shader module first before trying to set up the
   // shader stage for the pipeline...
   VkShaderModule vertex_module = {};
+  VkShaderModule frag_module = {};
 
-  VK_CHECK(vkCreateShaderModule(device, &shader_module_create_info, &callbacks, &vertex_module));
+  VK_CHECK(vkCreateShaderModule(device, shader_module_create_info, &callbacks, &vertex_module));
   BufferDestroy(&vertex_shader_code);
+
+  VK_CHECK(vkCreateShaderModule(device, shader_module_create_info + 1, &callbacks, &frag_module));
+  BufferDestroy(&frag_shader_code);
 
 // We need this shader stage create info to create a graphics pipeline.
 // typedef struct VkPipelineShaderStageCreateInfo {
@@ -900,11 +922,15 @@ int main(int argc, char* argv[])
 //     const VkSpecializationInfo*         pSpecializationInfo;
 // } VkPipelineShaderStageCreateInfo;
 
-  VkPipelineShaderStageCreateInfo vertex_shader_stage_create_info = {};
-  vertex_shader_stage_create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-  vertex_shader_stage_create_info.stage = VK_SHADER_STAGE_VERTEX_BIT;
-  vertex_shader_stage_create_info.module = vertex_module;
-  vertex_shader_stage_create_info.pName = "main";
+  VkPipelineShaderStageCreateInfo shader_stage_create_info[2] = {};
+  shader_stage_create_info[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+  shader_stage_create_info[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
+  shader_stage_create_info[0].module = vertex_module;
+  shader_stage_create_info[0].pName = "main";
+  shader_stage_create_info[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+  shader_stage_create_info[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+  shader_stage_create_info[1].module = frag_module;
+  shader_stage_create_info[1].pName = "main";
 
 // typedef struct VkGraphicsPipelineCreateInfo {
 //     VkStructureType                                  sType;
@@ -945,20 +971,12 @@ int main(int argc, char* argv[])
   pipeline_create_info.pDynamicState = &dynamic_create_info;
   pipeline_create_info.pViewportState = &vp;
   pipeline_create_info.pDepthStencilState = &ds;
-  pipeline_create_info.pStages = &vertex_shader_stage_create_info;
-  pipeline_create_info.stageCount = 1;
+  pipeline_create_info.pStages = shader_stage_create_info;
+  pipeline_create_info.stageCount = 2;
   pipeline_create_info.renderPass = render_pass;
   pipeline_create_info.subpass = 0;
   VK_CHECK(vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipeline_create_info, &callbacks, &pipeline));
   vkDestroyShaderModule(device, vertex_module, &callbacks); // "A shader module can be destroyed while pipelines created using its shaders are still in use."
-
-  VkClearValue clear_values_white[2] = {};
-  clear_values_white[0].color.float32[0] = 1.0f;
-  clear_values_white[0].color.float32[1] = 1.0f;
-  clear_values_white[0].color.float32[2] = 1.0f;
-  clear_values_white[0].color.float32[3] = 1.0f;
-  clear_values_white[1].depthStencil.depth = 1.0f;
-  clear_values_white[1].depthStencil.stencil = 0;
 
   VkClearValue clear_values_black[2] = {};
   clear_values_black[0].color.float32[0] = 0.0f;
@@ -997,7 +1015,7 @@ int main(int argc, char* argv[])
   rp_begin.renderArea.extent.width = 1264;
   rp_begin.renderArea.extent.height = 681;
   rp_begin.clearValueCount = 2;
-  rp_begin.pClearValues = clear_values_white;
+  rp_begin.pClearValues = clear_values_black;
 
   VkCommandBufferBeginInfo cmd_buf_info = {};
   cmd_buf_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
@@ -1073,38 +1091,18 @@ int main(int argc, char* argv[])
   img_mem_barrier.dstQueueFamilyIndex = queue_family_index;
   img_mem_barrier.subresourceRange = swapchain_image_subresource_range;
 
-  // Set up the command buffer for clearing the framebuffers.
-  VK_CHECK(vkBeginCommandBuffer(clear_color_cmd[0], &cmd_buf_info));
-  img_mem_barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-  img_mem_barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-  img_mem_barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-  img_mem_barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-  img_mem_barrier.image = swapchain_images[0];
-  vkCmdPipelineBarrier(clear_color_cmd[0], VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, nullptr, 0, nullptr, 1, &img_mem_barrier);
-  vkCmdClearColorImage(clear_color_cmd[0], swapchain_images[0], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clear_color_value_white, 1, &swapchain_image_subresource_range);
-  img_mem_barrier.srcAccessMask = 0;
-  img_mem_barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-  img_mem_barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-  img_mem_barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-  img_mem_barrier.image = swapchain_images[0];
-  vkCmdPipelineBarrier(clear_color_cmd[0], VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, nullptr, 0, nullptr, 1, &img_mem_barrier);
-  VK_CHECK(vkEndCommandBuffer(clear_color_cmd[0]));
+  // Set up the command buffer for drawing.
+  VK_CHECK(vkBeginCommandBuffer(draw_cmd[0], &cmd_buf_info));
+  vkCmdBeginRenderPass(draw_cmd[0], &rp_begin, VK_SUBPASS_CONTENTS_INLINE);
+  vkCmdBindPipeline(draw_cmd[0], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+  vkCmdBindDescriptorSets(draw_cmd[0], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout, 0, 1, &desc_set, 0, nullptr);
+  vkCmdEndRenderPass(draw_cmd[0]);
 
-  VK_CHECK(vkBeginCommandBuffer(clear_color_cmd[1], &cmd_buf_info));
-  img_mem_barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-  img_mem_barrier.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-  img_mem_barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-  img_mem_barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-  img_mem_barrier.image = swapchain_images[1];
-  vkCmdPipelineBarrier(clear_color_cmd[1], VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, nullptr, 0, nullptr, 1, &img_mem_barrier);
-  vkCmdClearColorImage(clear_color_cmd[1], swapchain_images[1], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clear_color_value_black, 1, &swapchain_image_subresource_range);
-  img_mem_barrier.srcAccessMask = 0;
-  img_mem_barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-  img_mem_barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-  img_mem_barrier.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-  img_mem_barrier.image = swapchain_images[1];
-  vkCmdPipelineBarrier(clear_color_cmd[1], VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_DEPENDENCY_BY_REGION_BIT, 0, nullptr, 0, nullptr, 1, &img_mem_barrier);
-  VK_CHECK(vkEndCommandBuffer(clear_color_cmd[1]));
+  VK_CHECK(vkBeginCommandBuffer(draw_cmd[1], &cmd_buf_info));
+  vkCmdBeginRenderPass(draw_cmd[1], &rp_begin, VK_SUBPASS_CONTENTS_INLINE);
+  vkCmdBindPipeline(draw_cmd[1], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+  vkCmdBindDescriptorSets(draw_cmd[1], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout, 0, 1, &desc_set, 0, nullptr);
+  vkCmdEndRenderPass(draw_cmd[1]);
 
 // typedef struct VkSubmitInfo {
 //     VkStructureType                sType;
@@ -1125,7 +1123,7 @@ int main(int argc, char* argv[])
   submit_info.pWaitSemaphores = &img_acq_sem;
   submit_info.pWaitDstStageMask = &wait_dst_stage_mask;
   submit_info.commandBufferCount = 1;
-  submit_info.pCommandBuffers = clear_color_cmd;
+  submit_info.pCommandBuffers = draw_cmd;
   submit_info.signalSemaphoreCount = 1;
   submit_info.pSignalSemaphores = &img_acq_sem;
 
@@ -1164,7 +1162,7 @@ int main(int argc, char* argv[])
     ++frame;
     if (VK_SUCCESS == vkAcquireNextImageKHR(device, swapchain, 0, img_acq_sem, VK_NULL_HANDLE, &current_buffer))
     {
-      submit_info.pCommandBuffers = clear_color_cmd + current_buffer;
+      submit_info.pCommandBuffers = draw_cmd + current_buffer;
       VK_CHECK(vkWaitForFences(device, 1, &submit_fence, VK_TRUE, UINT64_MAX));
       VK_CHECK(vkResetFences(device, 1, &submit_fence));
       VK_CHECK(vkQueueSubmit(queue, 1, &submit_info, submit_fence));
