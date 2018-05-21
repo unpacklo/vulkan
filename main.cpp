@@ -46,7 +46,7 @@ void VulkanInternalFreeNotify(void* userdata, size_t bytes, VkInternalAllocation
 {
 }
 
-#define VK_CHECK(vk_result)  do { VkResult result = (vk_result); if (result != VK_SUCCESS) { printf("%s:%d got %d!\n", __FILE__, __LINE__, result); getchar(); return 1; } } while(0)
+#define VK_CHECK(vk_result)  do { VkResult result = (vk_result); if (result != VK_SUCCESS) { printf("%s:%d got %u!\n", __FILE__, __LINE__, result); getchar(); return 1; } } while(0)
 #define ARRAY_COUNT(a)  (sizeof(a) / sizeof(a[0]))
 
 const char* const g_EnabledInstanceExtensions[] =
@@ -154,9 +154,9 @@ bool ReadBinaryFile(Buffer* file_contents, const char* path)
 
 static const float s_ClipSpaceTriangleVerts[] =
 {
-  -1.0f, -0.5f, 0.0f, 1.0f,
-  1.0f, -0.5f, 0.0f, 1.0f,
   0.0f, 1.0f, 0.0f, 1.0f,
+  1.0f, -0.5f, 0.0f, 1.0f,
+  -1.0f, -0.5f, 0.0f, 1.0f,
 };
 
 static const float s_ClipSpaceTriangleColors[] =
@@ -739,7 +739,7 @@ int main(int argc, char* argv[])
   rs.flags = 0;
   rs.polygonMode = VK_POLYGON_MODE_FILL;
   rs.cullMode = VK_CULL_MODE_BACK_BIT;
-  rs.frontFace = VK_FRONT_FACE_CLOCKWISE;
+  rs.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
   rs.depthClampEnable = VK_FALSE;
   rs.rasterizerDiscardEnable = VK_FALSE;
   rs.depthBiasEnable = VK_FALSE;
@@ -977,12 +977,13 @@ int main(int argc, char* argv[])
   pipeline_create_info.subpass = 0;
   VK_CHECK(vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipeline_create_info, &callbacks, &pipeline));
   vkDestroyShaderModule(device, vertex_module, &callbacks); // "A shader module can be destroyed while pipelines created using its shaders are still in use."
+  vkDestroyShaderModule(device, frag_module, &callbacks);
 
   VkClearValue clear_values_black[2] = {};
   clear_values_black[0].color.float32[0] = 0.0f;
   clear_values_black[0].color.float32[1] = 0.0f;
   clear_values_black[0].color.float32[2] = 0.0f;
-  clear_values_black[0].color.float32[3] = 0.0f;
+  clear_values_black[0].color.float32[3] = 1.0f;
   clear_values_black[1].depthStencil.depth = 1.0f;
   clear_values_black[1].depthStencil.stencil = 0;
   
@@ -1009,7 +1010,7 @@ int main(int argc, char* argv[])
   rp_begin.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
   rp_begin.pNext = nullptr;
   rp_begin.renderPass = render_pass;
-  rp_begin.framebuffer = framebuffers[current_buffer];
+  rp_begin.framebuffer = framebuffers[0];
   rp_begin.renderArea.offset.x = 0;
   rp_begin.renderArea.offset.y = 0;
   rp_begin.renderArea.extent.width = 1264;
@@ -1056,13 +1057,6 @@ int main(int argc, char* argv[])
   writes.dstBinding = 0;
   vkUpdateDescriptorSets(device, 1, &writes, 0, nullptr);
 
-  VkClearColorValue clear_color_value_black = {};
-  VkClearColorValue clear_color_value_white = {};
-  clear_color_value_white.float32[0] = 1.0f;
-  clear_color_value_white.float32[1] = 1.0f;
-  clear_color_value_white.float32[2] = 1.0f;
-  clear_color_value_white.float32[3] = 1.0f;
-
   VkImageSubresourceRange swapchain_image_subresource_range = {};
   swapchain_image_subresource_range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
   swapchain_image_subresource_range.baseMipLevel = 0;
@@ -1091,18 +1085,42 @@ int main(int argc, char* argv[])
   img_mem_barrier.dstQueueFamilyIndex = queue_family_index;
   img_mem_barrier.subresourceRange = swapchain_image_subresource_range;
 
+  const VkDeviceSize offsets = 0;
+  VkViewport viewport = {};
+  viewport.height = 681;
+  viewport.width = 1264;
+  viewport.minDepth = (float)0.0f;
+  viewport.maxDepth = (float)1.0f;
+
+  VkRect2D scissor = {};
+  scissor.extent.width = 1264;
+  scissor.extent.height = 681;
+  scissor.offset.x = 0;
+  scissor.offset.y = 0;
+
   // Set up the command buffer for drawing.
   VK_CHECK(vkBeginCommandBuffer(draw_cmd[0], &cmd_buf_info));
   vkCmdBeginRenderPass(draw_cmd[0], &rp_begin, VK_SUBPASS_CONTENTS_INLINE);
   vkCmdBindPipeline(draw_cmd[0], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
   vkCmdBindDescriptorSets(draw_cmd[0], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout, 0, 1, &desc_set, 0, nullptr);
+  vkCmdBindVertexBuffers(draw_cmd[0], 0, 1, &uniform_buffer, &offsets);
+  vkCmdSetViewport(draw_cmd[0], 0, 1, &viewport);
+  vkCmdSetScissor(draw_cmd[0], 0, 1, &scissor);
+  vkCmdDraw(draw_cmd[0], 3, 1, 0, 0);
   vkCmdEndRenderPass(draw_cmd[0]);
+  VK_CHECK(vkEndCommandBuffer(draw_cmd[0]));
 
+  rp_begin.framebuffer = framebuffers[1];
   VK_CHECK(vkBeginCommandBuffer(draw_cmd[1], &cmd_buf_info));
   vkCmdBeginRenderPass(draw_cmd[1], &rp_begin, VK_SUBPASS_CONTENTS_INLINE);
   vkCmdBindPipeline(draw_cmd[1], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
   vkCmdBindDescriptorSets(draw_cmd[1], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout, 0, 1, &desc_set, 0, nullptr);
+  vkCmdBindVertexBuffers(draw_cmd[1], 0, 1, &uniform_buffer, &offsets);
+  vkCmdSetViewport(draw_cmd[1], 0, 1, &viewport);
+  vkCmdSetScissor(draw_cmd[1], 0, 1, &scissor);
+  vkCmdDraw(draw_cmd[1], 3, 1, 0, 0);
   vkCmdEndRenderPass(draw_cmd[1]);
+  VK_CHECK(vkEndCommandBuffer(draw_cmd[1]));
 
 // typedef struct VkSubmitInfo {
 //     VkStructureType                sType;
