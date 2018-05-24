@@ -1103,7 +1103,6 @@ int main(int argc, char* argv[])
   vkCmdBeginRenderPass(draw_cmd[0], &rp_begin, VK_SUBPASS_CONTENTS_INLINE);
   vkCmdBindPipeline(draw_cmd[0], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
   vkCmdBindDescriptorSets(draw_cmd[0], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout, 0, 1, &desc_set, 0, nullptr);
-  vkCmdBindVertexBuffers(draw_cmd[0], 0, 1, &uniform_buffer, &offsets);
   vkCmdSetViewport(draw_cmd[0], 0, 1, &viewport);
   vkCmdSetScissor(draw_cmd[0], 0, 1, &scissor);
   vkCmdDraw(draw_cmd[0], 3, 1, 0, 0);
@@ -1115,7 +1114,6 @@ int main(int argc, char* argv[])
   vkCmdBeginRenderPass(draw_cmd[1], &rp_begin, VK_SUBPASS_CONTENTS_INLINE);
   vkCmdBindPipeline(draw_cmd[1], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
   vkCmdBindDescriptorSets(draw_cmd[1], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout, 0, 1, &desc_set, 0, nullptr);
-  vkCmdBindVertexBuffers(draw_cmd[1], 0, 1, &uniform_buffer, &offsets);
   vkCmdSetViewport(draw_cmd[1], 0, 1, &viewport);
   vkCmdSetScissor(draw_cmd[1], 0, 1, &scissor);
   vkCmdDraw(draw_cmd[1], 3, 1, 0, 0);
