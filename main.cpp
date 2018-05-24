@@ -46,7 +46,7 @@ void VulkanInternalFreeNotify(void* userdata, size_t bytes, VkInternalAllocation
 {
 }
 
-#define VK_CHECK(vk_result)  do { VkResult result = (vk_result); if (result != VK_SUCCESS) { printf("%s:%d got %u!\n", __FILE__, __LINE__, result); getchar(); return 1; } } while(0)
+#define VK_CHECK(vk_result)  do { VkResult result = (vk_result); if (result != VK_SUCCESS) { printf("%s:%d got %u!\n", __FILE__, __LINE__, result); getchar(); std::quick_exit(EXIT_FAILURE); } } while(0)
 #define ARRAY_COUNT(a)  (sizeof(a) / sizeof(a[0]))
 
 const char* const g_EnabledInstanceExtensions[] =
@@ -166,6 +166,196 @@ static const float s_ClipSpaceTriangleColors[] =
   0.0f, 0.0f, 1.0f, 1.0f,
 };
 
+struct VulkanState
+{
+  VkAllocationCallbacks callbacks;
+  VkInstance instance;
+  uint32_t num_physical_devices = 8;
+  VkPhysicalDevice physical_devices[8];
+  VkPhysicalDeviceMemoryProperties memory_properties[8];
+  VkPhysicalDevice physical_device;
+  uint32_t num_queue_properties = 16;
+  VkQueueFamilyProperties queue_properties[16];
+  float queue_priorities[32];
+  uint32_t queue_family_index = 0;
+  VkDevice device;
+  VkQueue queue;
+  VkSurfaceKHR surface;
+  VkSurfaceCapabilitiesKHR surface_capabilities;
+  uint32_t surface_formats_count;
+  VkSurfaceFormatKHR surface_formats[32];
+  VkSurfaceFormatKHR surface_format;
+  uint32_t present_modes_count;
+  VkPresentModeKHR present_modes[32];
+  VkSwapchainKHR swapchain;
+  uint32_t swapchain_image_count;
+  VkImage swapchain_images[8];
+  VkImageView swapchain_image_views[8];
+
+  void Init();
+  void CreateSwapchain(HINSTANCE hInstance);
+};
+
+void VulkanState::Init()
+{
+  VkInstanceCreateInfo info = {};
+  info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+  info.enabledExtensionCount = ARRAY_COUNT(g_EnabledInstanceExtensions);
+  info.ppEnabledExtensionNames = g_EnabledInstanceExtensions;
+  info.enabledLayerCount = ARRAY_COUNT(g_EnabledValidationLayers);
+  info.ppEnabledLayerNames = g_EnabledValidationLayers;
+
+  callbacks.pfnAllocation = VulkanAlignedAlloc;
+  callbacks.pfnReallocation = VulkanRealloc;
+  callbacks.pfnFree = VulkanFree;
+  callbacks.pfnInternalAllocation = VulkanInternalAllocNotify;
+  callbacks.pfnInternalFree = VulkanInternalFreeNotify;
+
+  VK_CHECK(vkCreateInstance(&info, &callbacks, &instance));
+  VK_CHECK(vkEnumeratePhysicalDevices(instance, &num_physical_devices, physical_devices));
+  printf("%u physical device(s) found!\n", num_physical_devices);
+
+  for (uint32_t i = 0; i < num_physical_devices; ++i)
+  {
+    VkPhysicalDeviceProperties properties = {};
+    vkGetPhysicalDeviceProperties(physical_devices[i], &properties);
+    printf("physical_devices[%u]:\n", i);
+    printf("  Vulkan API %u.%u.%u\n", VK_VERSION_MAJOR(properties.apiVersion), VK_VERSION_MINOR(properties.apiVersion), VK_VERSION_PATCH(properties.apiVersion));
+    printf("  Vulkan driver version: %u.%u.%u\n", VK_VERSION_MAJOR(properties.driverVersion), VK_VERSION_MINOR(properties.driverVersion), VK_VERSION_PATCH(properties.driverVersion));
+    printf("  Vendor: %u\n", properties.vendorID);
+    printf("  Device: %u\n", properties.deviceID);
+    printf("  Device type: %u\n", properties.deviceType);
+    printf("  Device name: %s\n", properties.deviceName);
+    printf("\n");
+    vkGetPhysicalDeviceMemoryProperties(physical_devices[i], memory_properties + i);
+  }
+
+  physical_device = physical_devices[0];
+  num_queue_properties = ARRAY_COUNT(queue_properties);
+  vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &num_queue_properties, queue_properties);
+
+  for (uint32_t i = 0; i < num_queue_properties; ++i)
+  {
+    printf("queue_properties[%u]:\n", i);
+    printf("  Flags: %u\n", queue_properties[i].queueFlags);
+    printf("  Queue count: %u\n", queue_properties[i].queueCount);
+    printf("  Min image transfer granularity: (%u, %u, %u)\n", queue_properties[i].minImageTransferGranularity.width, queue_properties[i].minImageTransferGranularity.height, queue_properties[i].minImageTransferGranularity.depth);
+  }
+
+  float queue_priorities[32] = {};
+  VkDeviceQueueCreateInfo queue_create_info = {};
+  queue_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+  queue_create_info.queueFamilyIndex = queue_family_index;
+  queue_create_info.queueCount = queue_properties[0].queueCount;
+  queue_create_info.pQueuePriorities = queue_priorities;
+
+  VkDeviceCreateInfo device_create_info = {};
+  device_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+  device_create_info.queueCreateInfoCount = 1;
+  device_create_info.pQueueCreateInfos = &queue_create_info;
+  device_create_info.enabledExtensionCount = ARRAY_COUNT(g_EnabledDeviceExtensions);
+  device_create_info.ppEnabledExtensionNames = g_EnabledDeviceExtensions;
+
+  VK_CHECK(vkCreateDevice(physical_device, &device_create_info, &callbacks, &device));
+  vkGetDeviceQueue(device, queue_family_index, 0, &queue);
+}
+
+void VulkanState::CreateSwapchain(HINSTANCE hInstance)
+{
+  VkWin32SurfaceCreateInfoKHR surface_create_info = {};
+  surface_create_info.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
+  surface_create_info.hinstance = hInstance;
+  surface_create_info.hwnd = GetActiveWindow();
+
+  VK_CHECK(vkCreateWin32SurfaceKHR(instance, &surface_create_info, &callbacks, &surface));
+  VK_CHECK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_device, surface, &surface_capabilities));
+
+  VkBool32 surface_supported = VK_FALSE;
+  VK_CHECK(vkGetPhysicalDeviceSurfaceSupportKHR(physical_device, queue_family_index, surface, &surface_supported));
+  printf("\n");
+  printf("Surface %#p supported: %s\n", surface, surface_supported == VK_TRUE ? "true" : "false");
+  printf("\n");
+
+
+  VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device, surface, &surface_formats_count, nullptr)); // WTF, Intel needs this function call to get the count first... is this a bug?
+  if (surface_formats_count > ARRAY_COUNT(surface_formats))
+  {
+    surface_formats_count = ARRAY_COUNT(surface_formats);
+  }
+
+  VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device, surface, &surface_formats_count, surface_formats));
+
+  for (uint32_t i = 0; i < surface_formats_count; ++i)
+  {
+    printf("surface_formats[%u]:\n", i);
+    printf("  format = %d\n", surface_formats[i].format);
+    printf("  colorspace = %d\n", surface_formats[i].colorSpace);
+  }
+
+  surface_format = surface_formats[0];
+  VK_CHECK(vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device, surface, &present_modes_count, nullptr)); // WTF, Intel needs this function call to get the count first... is this a bug?
+  if (present_modes_count > ARRAY_COUNT(present_modes))
+  {
+    present_modes_count = ARRAY_COUNT(present_modes);
+  }
+
+  VK_CHECK(vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device, surface, &present_modes_count, present_modes));
+
+  printf("\n");
+  for (uint32_t i = 0; i < present_modes_count; ++i)
+  {
+    printf("present_modes[%u] = %d\n", i, present_modes[i]);
+  }
+
+  VkSwapchainCreateInfoKHR swapchain_create_info = {};
+  swapchain_create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+  swapchain_create_info.surface = surface;
+  swapchain_create_info.minImageCount = 2;
+  swapchain_create_info.imageFormat = surface_format.format;
+  swapchain_create_info.imageColorSpace = surface_format.colorSpace;
+  swapchain_create_info.imageExtent = surface_capabilities.currentExtent;
+  swapchain_create_info.imageArrayLayers = 1;
+  swapchain_create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+  swapchain_create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+  swapchain_create_info.queueFamilyIndexCount = 1;
+  swapchain_create_info.pQueueFamilyIndices = &queue_family_index;
+  swapchain_create_info.preTransform = surface_capabilities.currentTransform;
+  swapchain_create_info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+  swapchain_create_info.presentMode = present_modes[0];
+
+  VK_CHECK(vkCreateSwapchainKHR(device, &swapchain_create_info, &callbacks, &swapchain));
+  swapchain_image_count = 0;
+  VK_CHECK(vkGetSwapchainImagesKHR(device, swapchain, &swapchain_image_count, nullptr));
+
+  if (swapchain_image_count > ARRAY_COUNT(swapchain_images))
+  {
+    swapchain_image_count = ARRAY_COUNT(swapchain_images);
+  }
+
+  VK_CHECK(vkGetSwapchainImagesKHR(device, swapchain, &swapchain_image_count, swapchain_images));
+
+  for (uint32_t i = 0; i < swapchain_image_count; ++i)
+  {
+    VkImageViewCreateInfo color_image_view = {};
+    color_image_view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    color_image_view.pNext = nullptr;
+    color_image_view.flags = 0;
+    color_image_view.image = swapchain_images[i];
+    color_image_view.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    color_image_view.format = surface_format.format;
+    color_image_view.components.r = VK_COMPONENT_SWIZZLE_R;
+    color_image_view.components.g = VK_COMPONENT_SWIZZLE_G;
+    color_image_view.components.b = VK_COMPONENT_SWIZZLE_B;
+    color_image_view.components.a = VK_COMPONENT_SWIZZLE_A;
+    color_image_view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    color_image_view.subresourceRange.baseMipLevel = 0;
+    color_image_view.subresourceRange.levelCount = 1;
+    color_image_view.subresourceRange.baseArrayLayer = 0;
+    color_image_view.subresourceRange.layerCount = 1;
+    VK_CHECK(vkCreateImageView(device, &color_image_view, &callbacks, swapchain_image_views + i));
+  }
+}
+
 int main(int argc, char* argv[])
 {
   printf("Vulkan header version: %u\n", VK_HEADER_VERSION);
@@ -212,179 +402,15 @@ int main(int argc, char* argv[])
 
   ShowWindow(hwnd, SW_SHOW);
 
-  VkInstanceCreateInfo info = {};
-  info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-  info.enabledExtensionCount = ARRAY_COUNT(g_EnabledInstanceExtensions);
-  info.ppEnabledExtensionNames = g_EnabledInstanceExtensions;
-  info.enabledLayerCount = ARRAY_COUNT(g_EnabledValidationLayers);
-  info.ppEnabledLayerNames = g_EnabledValidationLayers;
-
-  VkAllocationCallbacks callbacks = {};
-  callbacks.pfnAllocation = VulkanAlignedAlloc;
-  callbacks.pfnReallocation = VulkanRealloc;
-  callbacks.pfnFree = VulkanFree;
-  callbacks.pfnInternalAllocation = VulkanInternalAllocNotify;
-  callbacks.pfnInternalFree = VulkanInternalFreeNotify;
-
-  VkInstance instance = {};
-  VK_CHECK(vkCreateInstance(&info, &callbacks, &instance));
-
-  uint32_t num_physical_devices = 8;
-  VkPhysicalDevice physical_devices[8] = {};
-  VkPhysicalDeviceMemoryProperties memory_properties[8] = {};
-  VK_CHECK(vkEnumeratePhysicalDevices(instance, &num_physical_devices, physical_devices));
-  printf("%u physical device(s) found!\n", num_physical_devices);
-
-  for (uint32_t i = 0; i < num_physical_devices; ++i)
-  {
-    VkPhysicalDeviceProperties properties = {};
-    vkGetPhysicalDeviceProperties(physical_devices[i], &properties);
-    printf("physical_devices[%u]:\n", i);
-    printf("  Vulkan API %u.%u.%u\n", VK_VERSION_MAJOR(properties.apiVersion), VK_VERSION_MINOR(properties.apiVersion), VK_VERSION_PATCH(properties.apiVersion));
-    printf("  Vulkan driver version: %u.%u.%u\n", VK_VERSION_MAJOR(properties.driverVersion), VK_VERSION_MINOR(properties.driverVersion), VK_VERSION_PATCH(properties.driverVersion));
-    printf("  Vendor: %u\n", properties.vendorID);
-    printf("  Device: %u\n", properties.deviceID);
-    printf("  Device type: %u\n", properties.deviceType);
-    printf("  Device name: %s\n", properties.deviceName);
-    printf("\n");
-    vkGetPhysicalDeviceMemoryProperties(physical_devices[i], memory_properties + i);
-  }
-
-  VkPhysicalDevice physical_device = physical_devices[0];
-  uint32_t num_queue_properties = 16;
-  VkQueueFamilyProperties queue_properties[16] = {};
-  vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &num_queue_properties, queue_properties);
-
-  for (uint32_t i = 0; i < num_queue_properties; ++i)
-  {
-    printf("queue_properties[%u]:\n", i);
-    printf("  Flags: %u\n", queue_properties[i].queueFlags);
-    printf("  Queue count: %u\n", queue_properties[i].queueCount);
-    printf("  Min image transfer granularity: (%u, %u, %u)\n", queue_properties[i].minImageTransferGranularity.width, queue_properties[i].minImageTransferGranularity.height, queue_properties[i].minImageTransferGranularity.depth);
-  }
-
-  float queue_priorities[32] = {};
-  uint32_t queue_family_index = 0;
-  VkDeviceQueueCreateInfo queue_create_info = {};
-  queue_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-  queue_create_info.queueFamilyIndex = queue_family_index;
-  queue_create_info.queueCount = queue_properties[0].queueCount;
-  queue_create_info.pQueuePriorities = queue_priorities;
-
-  VkDeviceCreateInfo device_create_info = {};
-  device_create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-  device_create_info.queueCreateInfoCount = 1;
-  device_create_info.pQueueCreateInfos = &queue_create_info;
-  device_create_info.enabledExtensionCount = ARRAY_COUNT(g_EnabledDeviceExtensions);
-  device_create_info.ppEnabledExtensionNames = g_EnabledDeviceExtensions;
-
-  VkDevice device = {};
-  VK_CHECK(vkCreateDevice(physical_device, &device_create_info, &callbacks, &device));
-
-  VkQueue queue = {};
-  vkGetDeviceQueue(device, queue_family_index, 0, &queue);
-
-  VkWin32SurfaceCreateInfoKHR surface_create_info = {};
-  surface_create_info.sType = VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR;
-  surface_create_info.hinstance = hInstance;
-  surface_create_info.hwnd = GetActiveWindow();
-  VkSurfaceKHR surface = {};
-  VK_CHECK(vkCreateWin32SurfaceKHR(instance, &surface_create_info, &callbacks, &surface));
-
-  VkSurfaceCapabilitiesKHR surface_capabilities = {};
-  VK_CHECK(vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_device, surface, &surface_capabilities));
-
-  VkBool32 surface_supported = VK_FALSE;
-  VK_CHECK(vkGetPhysicalDeviceSurfaceSupportKHR(physical_device, queue_family_index, surface, &surface_supported));
-  printf("\n");
-  printf("Surface %#p supported: %s\n", surface, surface_supported == VK_TRUE ? "true" : "false");
-  printf("\n");
-
-  uint32_t surface_formats_count;
-  VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device, surface, &surface_formats_count, nullptr)); // WTF, Intel needs this function call to get the count first... is this a bug?
-  if (surface_formats_count > 32)
-  {
-    surface_formats_count = 32;
-  }
-  VkSurfaceFormatKHR surface_formats[32] = {};
-  VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device, surface, &surface_formats_count, surface_formats));
-
-  for (uint32_t i = 0; i < surface_formats_count; ++i)
-  {
-    printf("surface_formats[%u]:\n", i);
-    printf("  format = %d\n", surface_formats[i].format);
-    printf("  colorspace = %d\n", surface_formats[i].colorSpace);
-  }
-
-  VkSurfaceFormatKHR surface_format = surface_formats[0];
-
-  uint32_t present_modes_count;
-  VK_CHECK(vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device, surface, &present_modes_count, nullptr)); // WTF, Intel needs this function call to get the count first... is this a bug?
-  if (present_modes_count > 32)
-  {
-    present_modes_count = 32;
-  }
-  VkPresentModeKHR present_modes[32] = {};
-  VK_CHECK(vkGetPhysicalDeviceSurfacePresentModesKHR(physical_device, surface, &present_modes_count, present_modes));
-
-  printf("\n");
-  for (uint32_t i = 0; i < present_modes_count; ++i)
-  {
-    printf("present_modes[%u] = %d\n", i, present_modes[i]);
-  }
-
-  VkSwapchainCreateInfoKHR swapchain_create_info = {};
-  swapchain_create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-  swapchain_create_info.surface = surface;
-  swapchain_create_info.minImageCount = 2;
-  swapchain_create_info.imageFormat = surface_format.format;
-  swapchain_create_info.imageColorSpace = surface_format.colorSpace;
-  swapchain_create_info.imageExtent = surface_capabilities.currentExtent;
-  swapchain_create_info.imageArrayLayers = 1;
-  swapchain_create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-  swapchain_create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-  swapchain_create_info.queueFamilyIndexCount = 1;
-  swapchain_create_info.pQueueFamilyIndices = &queue_family_index;
-  swapchain_create_info.preTransform = surface_capabilities.currentTransform;
-  swapchain_create_info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
-  swapchain_create_info.presentMode = present_modes[0];
-
-  VkSwapchainKHR swapchain = {};
-  VK_CHECK(vkCreateSwapchainKHR(device, &swapchain_create_info, &callbacks, &swapchain));
-
-  uint32_t swapchain_image_count = {};
-  VK_CHECK(vkGetSwapchainImagesKHR(device, swapchain, &swapchain_image_count, nullptr));
-
-  VkImage swapchain_images[8] = {};
-  VkImageView swapchain_image_views[8] = {};
-  VK_CHECK(vkGetSwapchainImagesKHR(device, swapchain, &swapchain_image_count, swapchain_images));
-
-  for (uint32_t i = 0; i < swapchain_image_count; ++i)
-  {
-    VkImageViewCreateInfo color_image_view = {};
-    color_image_view.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-    color_image_view.pNext = nullptr;
-    color_image_view.flags = 0;
-    color_image_view.image = swapchain_images[i];
-    color_image_view.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    color_image_view.format = surface_format.format;
-    color_image_view.components.r = VK_COMPONENT_SWIZZLE_R;
-    color_image_view.components.g = VK_COMPONENT_SWIZZLE_G;
-    color_image_view.components.b = VK_COMPONENT_SWIZZLE_B;
-    color_image_view.components.a = VK_COMPONENT_SWIZZLE_A;
-    color_image_view.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-    color_image_view.subresourceRange.baseMipLevel = 0;
-    color_image_view.subresourceRange.levelCount = 1;
-    color_image_view.subresourceRange.baseArrayLayer = 0;
-    color_image_view.subresourceRange.layerCount = 1;
-    VK_CHECK(vkCreateImageView(device, &color_image_view, &callbacks, swapchain_image_views + i));
-  }
+  VulkanState state;
+  state.Init();
+  state.CreateSwapchain(hInstance);
 
   VkCommandPoolCreateInfo cmd_pool_info = {};
   cmd_pool_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-  cmd_pool_info.queueFamilyIndex = queue_family_index;
+  cmd_pool_info.queueFamilyIndex = state.queue_family_index;
   VkCommandPool cmd_pool = {};
-  VK_CHECK(vkCreateCommandPool(device, &cmd_pool_info, &callbacks, &cmd_pool));
+  VK_CHECK(vkCreateCommandPool(state.device, &cmd_pool_info, &state.callbacks, &cmd_pool));
 
   VkCommandBufferAllocateInfo cmd_buffer_alloc_info = {};
   cmd_buffer_alloc_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -392,7 +418,7 @@ int main(int argc, char* argv[])
   cmd_buffer_alloc_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
   cmd_buffer_alloc_info.commandBufferCount = 2;
   VkCommandBuffer draw_cmd[2] = {};
-  VK_CHECK(vkAllocateCommandBuffers(device, &cmd_buffer_alloc_info, draw_cmd));
+  VK_CHECK(vkAllocateCommandBuffers(state.device, &cmd_buffer_alloc_info, draw_cmd));
 
   VkImageCreateInfo image_create_info = {};
   image_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -408,21 +434,21 @@ int main(int argc, char* argv[])
   image_create_info.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
   image_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
   VkImage depth_buffer = {};
-  VK_CHECK(vkCreateImage(device, &image_create_info, &callbacks, &depth_buffer));
+  VK_CHECK(vkCreateImage(state.device, &image_create_info, &state.callbacks, &depth_buffer));
 
   VkMemoryRequirements mem_reqs = {};
-  vkGetImageMemoryRequirements(device, depth_buffer, &mem_reqs);
+  vkGetImageMemoryRequirements(state.device, depth_buffer, &mem_reqs);
   VkMemoryAllocateInfo mem_alloc_info = {};
   mem_alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
   mem_alloc_info.allocationSize = mem_reqs.size;
 
-  for (uint32_t i = 0; i < memory_properties[0].memoryTypeCount; ++i)
+  for (uint32_t i = 0; i < state.memory_properties[0].memoryTypeCount; ++i)
   {
     // wtf is this check doing?  Why does this work?
     bool is_supported_memory_type = (mem_reqs.memoryTypeBits & (1 << i)) > 0;
     if (is_supported_memory_type)
     {
-      if ((memory_properties[0].memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) == VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
+      if ((state.memory_properties[0].memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) == VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
       {
         mem_alloc_info.memoryTypeIndex = i;
       }
@@ -430,8 +456,8 @@ int main(int argc, char* argv[])
   }
 
   VkDeviceMemory depth_buffer_memory = {};
-  VK_CHECK(vkAllocateMemory(device, &mem_alloc_info, &callbacks, &depth_buffer_memory));
-  VK_CHECK(vkBindImageMemory(device, depth_buffer, depth_buffer_memory, 0));
+  VK_CHECK(vkAllocateMemory(state.device, &mem_alloc_info, &state.callbacks, &depth_buffer_memory));
+  VK_CHECK(vkBindImageMemory(state.device, depth_buffer, depth_buffer_memory, 0));
   VkImageViewCreateInfo depth_view_info = {};
   depth_view_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
   depth_view_info.image = depth_buffer;
@@ -447,7 +473,7 @@ int main(int argc, char* argv[])
   depth_view_info.subresourceRange.baseArrayLayer = 0;
   depth_view_info.subresourceRange.layerCount = 1;
   VkImageView depth_image_view = {};
-  VK_CHECK(vkCreateImageView(device, &depth_view_info, &callbacks, &depth_image_view));
+  VK_CHECK(vkCreateImageView(state.device, &depth_view_info, &state.callbacks, &depth_image_view));
 
   VkBufferCreateInfo buffer_create_info = {};
   buffer_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
@@ -456,10 +482,10 @@ int main(int argc, char* argv[])
   buffer_create_info.queueFamilyIndexCount = 0;
   buffer_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
   VkBuffer uniform_buffer = {};
-  VK_CHECK(vkCreateBuffer(device, &buffer_create_info, &callbacks, &uniform_buffer));
+  VK_CHECK(vkCreateBuffer(state.device, &buffer_create_info, &state.callbacks, &uniform_buffer));
 
   VkMemoryRequirements memory_requirements = {};
-  vkGetBufferMemoryRequirements(device, uniform_buffer, &memory_requirements);
+  vkGetBufferMemoryRequirements(state.device, uniform_buffer, &memory_requirements);
 
   VkMemoryAllocateInfo alloc_info = {};
   alloc_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
@@ -468,9 +494,9 @@ int main(int argc, char* argv[])
   VkFlags required_mask = VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
 
   // Look for a memory type that matches what we're looking for.
-  for (uint32_t i = 0; i < memory_properties[0].memoryTypeCount; ++i)
+  for (uint32_t i = 0; i < state.memory_properties[0].memoryTypeCount; ++i)
   {
-    if ((memory_requirements.memoryTypeBits & (1 << i)) && ((memory_properties[0].memoryTypes[i].propertyFlags & required_mask) == required_mask))
+    if ((memory_requirements.memoryTypeBits & (1 << i)) && ((state.memory_properties[0].memoryTypes[i].propertyFlags & required_mask) == required_mask))
     {
       alloc_info.memoryTypeIndex = i;
       break;
@@ -478,16 +504,16 @@ int main(int argc, char* argv[])
   }
 
   VkDeviceMemory uniform_device_memory = {};
-  VK_CHECK(vkAllocateMemory(device, &alloc_info, &callbacks, &uniform_device_memory));
+  VK_CHECK(vkAllocateMemory(state.device, &alloc_info, &state.callbacks, &uniform_device_memory));
 
   uint8_t* mapped_uniform_data = NULL;
-  VK_CHECK(vkMapMemory(device, uniform_device_memory, 0, memory_requirements.size, 0, (void**)&mapped_uniform_data));
+  VK_CHECK(vkMapMemory(state.device, uniform_device_memory, 0, memory_requirements.size, 0, (void**)&mapped_uniform_data));
 
   memmove(mapped_uniform_data, s_ClipSpaceTriangleVerts, sizeof(s_ClipSpaceTriangleVerts));
   memmove(mapped_uniform_data + sizeof(s_ClipSpaceTriangleVerts), s_ClipSpaceTriangleColors, sizeof(s_ClipSpaceTriangleColors));
-  vkUnmapMemory(device, uniform_device_memory);
+  vkUnmapMemory(state.device, uniform_device_memory);
 
-  VK_CHECK(vkBindBufferMemory(device, uniform_buffer, uniform_device_memory, 0));
+  VK_CHECK(vkBindBufferMemory(state.device, uniform_buffer, uniform_device_memory, 0));
 
   VkDescriptorBufferInfo buffer_info = {};
   buffer_info.buffer = uniform_buffer;
@@ -508,7 +534,7 @@ int main(int argc, char* argv[])
   descriptor_layout.pBindings = &layout_binding;
 
   VkDescriptorSetLayout desc_layout = {};
-  VK_CHECK(vkCreateDescriptorSetLayout(device, &descriptor_layout, &callbacks, &desc_layout));
+  VK_CHECK(vkCreateDescriptorSetLayout(state.device, &descriptor_layout, &state.callbacks, &desc_layout));
 
 // typedef struct VkPipelineLayoutCreateInfo {
 //     VkStructureType                 sType;
@@ -528,7 +554,7 @@ int main(int argc, char* argv[])
   pipeline_layout_create_info.setLayoutCount = 1;
   pipeline_layout_create_info.pSetLayouts = &desc_layout;
   VkPipelineLayout pipeline_layout = {};
-  VK_CHECK(vkCreatePipelineLayout(device, &pipeline_layout_create_info, &callbacks, &pipeline_layout));
+  VK_CHECK(vkCreatePipelineLayout(state.device, &pipeline_layout_create_info, &state.callbacks, &pipeline_layout));
 
 // typedef struct VkAttachmentDescription {
 //     VkAttachmentDescriptionFlags    flags;
@@ -543,7 +569,7 @@ int main(int argc, char* argv[])
 // } VkAttachmentDescription;
 
   VkAttachmentDescription attachments[2] = {};
-  attachments[0].format = surface_format.format;
+  attachments[0].format = state.surface_format.format;
   attachments[0].samples = VK_SAMPLE_COUNT_1_BIT;
   attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
   attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -631,7 +657,7 @@ int main(int argc, char* argv[])
   rp_info.pDependencies = nullptr;
 
   VkRenderPass render_pass = {};
-  VK_CHECK(vkCreateRenderPass(device, &rp_info, &callbacks, &render_pass));
+  VK_CHECK(vkCreateRenderPass(state.device, &rp_info, &state.callbacks, &render_pass));
 
   VkImageView framebuffer_attachments[2] = {};
   framebuffer_attachments[1] = depth_image_view;
@@ -660,10 +686,10 @@ int main(int argc, char* argv[])
 
   VkFramebuffer framebuffers[2] = {};
 
-  for (uint32_t i = 0; i < swapchain_image_count; ++i)
+  for (uint32_t i = 0; i < state.swapchain_image_count; ++i)
   {
-    framebuffer_attachments[0] = swapchain_image_views[i];
-    VK_CHECK(vkCreateFramebuffer(device, &fb_info, &callbacks, framebuffers + i));
+    framebuffer_attachments[0] = state.swapchain_image_views[i];
+    VK_CHECK(vkCreateFramebuffer(state.device, &fb_info, &state.callbacks, framebuffers + i));
   }
 
 // typedef struct VkPipelineDynamicStateCreateInfo {
@@ -905,10 +931,10 @@ int main(int argc, char* argv[])
   VkShaderModule vertex_module = {};
   VkShaderModule frag_module = {};
 
-  VK_CHECK(vkCreateShaderModule(device, shader_module_create_info, &callbacks, &vertex_module));
+  VK_CHECK(vkCreateShaderModule(state.device, shader_module_create_info, &state.callbacks, &vertex_module));
   BufferDestroy(&vertex_shader_code);
 
-  VK_CHECK(vkCreateShaderModule(device, shader_module_create_info + 1, &callbacks, &frag_module));
+  VK_CHECK(vkCreateShaderModule(state.device, shader_module_create_info + 1, &state.callbacks, &frag_module));
   BufferDestroy(&frag_shader_code);
 
 // We need this shader stage create info to create a graphics pipeline.
@@ -975,9 +1001,9 @@ int main(int argc, char* argv[])
   pipeline_create_info.stageCount = 2;
   pipeline_create_info.renderPass = render_pass;
   pipeline_create_info.subpass = 0;
-  VK_CHECK(vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipeline_create_info, &callbacks, &pipeline));
-  vkDestroyShaderModule(device, vertex_module, &callbacks); // "A shader module can be destroyed while pipelines created using its shaders are still in use."
-  vkDestroyShaderModule(device, frag_module, &callbacks);
+  VK_CHECK(vkCreateGraphicsPipelines(state.device, VK_NULL_HANDLE, 1, &pipeline_create_info, &state.callbacks, &pipeline));
+  vkDestroyShaderModule(state.device, vertex_module, &state.callbacks); // "A shader module can be destroyed while pipelines created using its shaders are still in use."
+  vkDestroyShaderModule(state.device, frag_module, &state.callbacks);
 
   VkClearValue clear_values_black[2] = {};
   clear_values_black[0].color.float32[0] = 0.0f;
@@ -990,7 +1016,7 @@ int main(int argc, char* argv[])
   VkSemaphore img_acq_sem = {};
   VkSemaphoreCreateInfo sem_create_info = {};
   sem_create_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-  VK_CHECK(vkCreateSemaphore(device, &sem_create_info, &callbacks, &img_acq_sem));
+  VK_CHECK(vkCreateSemaphore(state.device, &sem_create_info, &state.callbacks, &img_acq_sem));
 
 // typedef struct VkFenceCreateInfo {
 //     VkStructureType       sType;
@@ -1002,7 +1028,7 @@ int main(int argc, char* argv[])
   VkFenceCreateInfo fence_create_info = {};
   fence_create_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
   fence_create_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
-  VK_CHECK(vkCreateFence(device, &fence_create_info, &callbacks, &submit_fence));
+  VK_CHECK(vkCreateFence(state.device, &fence_create_info, &state.callbacks, &submit_fence));
 
   uint32_t current_buffer = {};
 
@@ -1035,7 +1061,7 @@ int main(int argc, char* argv[])
   descriptor_pool.poolSizeCount = 1;
   descriptor_pool.pPoolSizes = &type_count;
   VkDescriptorPool desc_pool = {};
-  VK_CHECK(vkCreateDescriptorPool(device, &descriptor_pool, &callbacks, &desc_pool));
+  VK_CHECK(vkCreateDescriptorPool(state.device, &descriptor_pool, &state.callbacks, &desc_pool));
 
   VkDescriptorSetAllocateInfo desc_alloc_info = {};
   desc_alloc_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
@@ -1044,7 +1070,7 @@ int main(int argc, char* argv[])
   desc_alloc_info.descriptorSetCount = 1;
   desc_alloc_info.pSetLayouts = &desc_layout;
   VkDescriptorSet desc_set = {};
-  VK_CHECK(vkAllocateDescriptorSets(device, &desc_alloc_info, &desc_set));
+  VK_CHECK(vkAllocateDescriptorSets(state.device, &desc_alloc_info, &desc_set));
 
   VkWriteDescriptorSet writes = {};
   writes.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -1055,7 +1081,7 @@ int main(int argc, char* argv[])
   writes.pBufferInfo = &buffer_info;
   writes.dstArrayElement = 0;
   writes.dstBinding = 0;
-  vkUpdateDescriptorSets(device, 1, &writes, 0, nullptr);
+  vkUpdateDescriptorSets(state.device, 1, &writes, 0, nullptr);
 
   VkImageSubresourceRange swapchain_image_subresource_range = {};
   swapchain_image_subresource_range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -1081,8 +1107,8 @@ int main(int argc, char* argv[])
   VkImageMemoryBarrier img_mem_barrier = {};
   img_mem_barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
   img_mem_barrier.pNext = nullptr;
-  img_mem_barrier.srcQueueFamilyIndex = queue_family_index;
-  img_mem_barrier.dstQueueFamilyIndex = queue_family_index;
+  img_mem_barrier.srcQueueFamilyIndex = state.queue_family_index;
+  img_mem_barrier.dstQueueFamilyIndex = state.queue_family_index;
   img_mem_barrier.subresourceRange = swapchain_image_subresource_range;
 
   const VkDeviceSize offsets = 0;
@@ -1160,7 +1186,7 @@ int main(int argc, char* argv[])
   present_info.waitSemaphoreCount = 1;
   present_info.pWaitSemaphores = &img_acq_sem;
   present_info.swapchainCount = 1;
-  present_info.pSwapchains = &swapchain;
+  present_info.pSwapchains = &state.swapchain;
   present_info.pImageIndices = &current_buffer;
   present_info.pResults = nullptr;
 
@@ -1176,13 +1202,13 @@ int main(int argc, char* argv[])
     // }
 
     ++frame;
-    if (VK_SUCCESS == vkAcquireNextImageKHR(device, swapchain, 0, img_acq_sem, VK_NULL_HANDLE, &current_buffer))
+    if (VK_SUCCESS == vkAcquireNextImageKHR(state.device, state.swapchain, 0, img_acq_sem, VK_NULL_HANDLE, &current_buffer))
     {
       submit_info.pCommandBuffers = draw_cmd + current_buffer;
-      VK_CHECK(vkWaitForFences(device, 1, &submit_fence, VK_TRUE, UINT64_MAX));
-      VK_CHECK(vkResetFences(device, 1, &submit_fence));
-      VK_CHECK(vkQueueSubmit(queue, 1, &submit_info, submit_fence));
-      VK_CHECK(vkQueuePresentKHR(queue, &present_info));
+      VK_CHECK(vkWaitForFences(state.device, 1, &submit_fence, VK_TRUE, UINT64_MAX));
+      VK_CHECK(vkResetFences(state.device, 1, &submit_fence));
+      VK_CHECK(vkQueueSubmit(state.queue, 1, &submit_info, submit_fence));
+      VK_CHECK(vkQueuePresentKHR(state.queue, &present_info));
     }
 
     while (BOOL message_result = PeekMessage(&msg, NULL, 0, 0, PM_REMOVE) != 0)
@@ -1207,35 +1233,35 @@ int main(int argc, char* argv[])
   }
 
   // Wait for the last submission to flush before destroying everything.
-  VK_CHECK(vkWaitForFences(device, 1, &submit_fence, VK_TRUE, UINT64_MAX));
-  VK_CHECK(vkResetFences(device, 1, &submit_fence));
+  VK_CHECK(vkWaitForFences(state.device, 1, &submit_fence, VK_TRUE, UINT64_MAX));
+  VK_CHECK(vkResetFences(state.device, 1, &submit_fence));
 
-  vkDestroyDescriptorPool(device, desc_pool, &callbacks);
-  vkDestroyPipeline(device, pipeline, &callbacks);
+  vkDestroyDescriptorPool(state.device, desc_pool, &state.callbacks);
+  vkDestroyPipeline(state.device, pipeline, &state.callbacks);
 
-  for (uint32_t i = 0; i < swapchain_image_count; ++i)
+  for (uint32_t i = 0; i < state.swapchain_image_count; ++i)
   {
-    vkDestroyFramebuffer(device, framebuffers[i], &callbacks);
+    vkDestroyFramebuffer(state.device, framebuffers[i], &state.callbacks);
   }
-  vkDestroyRenderPass(device, render_pass, &callbacks);
-  vkDestroyFence(device, submit_fence, &callbacks);
-  vkDestroySemaphore(device, img_acq_sem, &callbacks);
-  vkFreeMemory(device, uniform_device_memory, &callbacks);
-  vkDestroyPipelineLayout(device, pipeline_layout, &callbacks);
-  vkDestroyDescriptorSetLayout(device, desc_layout, &callbacks);
-  vkDestroyBuffer(device, uniform_buffer, &callbacks);
-  vkDestroyImageView(device, depth_image_view, &callbacks);
-  vkFreeMemory(device, depth_buffer_memory, &callbacks);
-  vkDestroyImage(device, depth_buffer, &callbacks);
-  vkDestroyCommandPool(device, cmd_pool, &callbacks);
-  for (uint32_t i = 0; i < swapchain_image_count; ++i)
+  vkDestroyRenderPass(state.device, render_pass, &state.callbacks);
+  vkDestroyFence(state.device, submit_fence, &state.callbacks);
+  vkDestroySemaphore(state.device, img_acq_sem, &state.callbacks);
+  vkFreeMemory(state.device, uniform_device_memory, &state.callbacks);
+  vkDestroyPipelineLayout(state.device, pipeline_layout, &state.callbacks);
+  vkDestroyDescriptorSetLayout(state.device, desc_layout, &state.callbacks);
+  vkDestroyBuffer(state.device, uniform_buffer, &state.callbacks);
+  vkDestroyImageView(state.device, depth_image_view, &state.callbacks);
+  vkFreeMemory(state.device, depth_buffer_memory, &state.callbacks);
+  vkDestroyImage(state.device, depth_buffer, &state.callbacks);
+  vkDestroyCommandPool(state.device, cmd_pool, &state.callbacks);
+  for (uint32_t i = 0; i < state.swapchain_image_count; ++i)
   {
-    vkDestroyImageView(device, swapchain_image_views[i], &callbacks);
+    vkDestroyImageView(state.device, state.swapchain_image_views[i], &state.callbacks);
   }
-  vkDestroySwapchainKHR(device, swapchain, &callbacks);
-  vkDestroySurfaceKHR(instance, surface, &callbacks);
-  vkDestroyDevice(device, &callbacks);
-  vkDestroyInstance(instance, &callbacks);
+  vkDestroySwapchainKHR(state.device, state.swapchain, &state.callbacks);
+  vkDestroySurfaceKHR(state.instance, state.surface, &state.callbacks);
+  vkDestroyDevice(state.device, &state.callbacks);
+  vkDestroyInstance(state.instance, &state.callbacks);
 
   DestroyWindow(hwnd);
   getchar();
