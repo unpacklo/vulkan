@@ -723,7 +723,7 @@ int main(int argc, char* argv[])
   vi.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
   vi.pNext = nullptr;
   vi.flags = 0;
-  vi.vertexBindingDescriptionCount = 1;
+  vi.vertexBindingDescriptionCount = 0;
   vi.pVertexBindingDescriptions = &vi_binding;
   vi.vertexAttributeDescriptionCount = 0; // fix me
   vi.pVertexAttributeDescriptions = vi_attribs;
