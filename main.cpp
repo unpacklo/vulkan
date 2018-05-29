@@ -1,6 +1,7 @@
 #define _CRT_SECURE_NO_WARNINGS
 #include <cstdio>
 #include <cstdlib>
+#include <cmath>
 #include <malloc.h>
 
 #define VK_USE_PLATFORM_WIN32_KHR
@@ -97,9 +98,108 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
   }
 }
 
+struct Vec3
+{
+  float x;
+  float y;
+  float z;
+
+  Vec3(float x, float y, float z)
+    : x(x)
+    , y(y)
+    , z(z)
+  {
+  }
+
+  float Dot(const Vec3& v) const
+  {
+    return (x * v.x) + (y * v.y) + (z * v.z);
+  }
+
+  Vec3 Cross(const Vec3& v) const
+  {
+    return Vec3((y * v.z) - (z * v.y), (-x * v.z) + (z * v.x), (x * v.y) - (y * v.x));
+  }
+
+  float Length() const
+  {
+    return std::sqrt(LengthSquared());
+  }
+
+  float LengthSquared() const
+  {
+    return this->Dot(*this);
+  }
+};
+
 struct Mat4
 {
   float m[16];
+
+  void SetIdentity()
+  {
+    m[0] = 1.0f;
+    m[1] = 0.0f;
+    m[2] = 0.0f;
+    m[3] = 0.0f;
+
+    m[4] = 0.0f;
+    m[5] = 1.0f;
+    m[6] = 0.0f;
+    m[7] = 0.0f;
+
+    m[8] = 0.0f;
+    m[9] = 0.0f;
+    m[10] = 1.0f;
+    m[11] = 0.0f;
+
+    m[12] = 0.0f;
+    m[13] = 0.0f;
+    m[14] = 0.0f;
+    m[15] = 1.0f;
+  }
+
+  void Multiply(const Mat4& a)
+  {
+    Mat4 copy(*this);
+
+    m[0] = (copy.m[0] * a.m[0]) + (copy.m[1] * a.m[4]) + (copy.m[2] * a.m[8]) + (copy.m[3] * a.m[12]);
+    m[1] = (copy.m[0] * a.m[1]) + (copy.m[1] * a.m[5]) + (copy.m[2] * a.m[9]) + (copy.m[3] * a.m[13]);
+    m[2] = (copy.m[0] * a.m[2]) + (copy.m[1] * a.m[6]) + (copy.m[2] * a.m[10]) + (copy.m[3] * a.m[14]);
+    m[3] = (copy.m[0] * a.m[3]) + (copy.m[1] * a.m[7]) + (copy.m[2] * a.m[11]) + (copy.m[3] * a.m[15]);
+
+    m[4] = (copy.m[4] * a.m[0]) + (copy.m[5] * a.m[4]) + (copy.m[6] * a.m[8]) + (copy.m[7] * a.m[12]);
+    m[5] = (copy.m[4] * a.m[1]) + (copy.m[5] * a.m[5]) + (copy.m[6] * a.m[9]) + (copy.m[7] * a.m[13]);
+    m[6] = (copy.m[4] * a.m[2]) + (copy.m[5] * a.m[6]) + (copy.m[6] * a.m[10]) + (copy.m[7] * a.m[14]);
+    m[7] = (copy.m[4] * a.m[3]) + (copy.m[5] * a.m[7]) + (copy.m[6] * a.m[11]) + (copy.m[7] * a.m[15]);
+
+    m[8] = (copy.m[8] * a.m[0]) + (copy.m[9] * a.m[4]) + (copy.m[10] * a.m[8]) + (copy.m[11] * a.m[12]);
+    m[9] = (copy.m[8] * a.m[1]) + (copy.m[9] * a.m[5]) + (copy.m[10] * a.m[9]) + (copy.m[11] * a.m[13]);
+    m[10] = (copy.m[8] * a.m[2]) + (copy.m[9] * a.m[6]) + (copy.m[10] * a.m[10]) + (copy.m[11] * a.m[14]);
+    m[11] = (copy.m[8] * a.m[3]) + (copy.m[9] * a.m[7]) + (copy.m[10] * a.m[11]) + (copy.m[11] * a.m[15]);
+
+    m[12] = (copy.m[12] * a.m[0]) + (copy.m[13] * a.m[4]) + (copy.m[14] * a.m[8]) + (copy.m[15] * a.m[12]);
+    m[13] = (copy.m[12] * a.m[1]) + (copy.m[13] * a.m[5]) + (copy.m[14] * a.m[9]) + (copy.m[15] * a.m[13]);
+    m[14] = (copy.m[12] * a.m[2]) + (copy.m[13] * a.m[6]) + (copy.m[14] * a.m[10]) + (copy.m[15] * a.m[14]);
+    m[15] = (copy.m[12] * a.m[3]) + (copy.m[13] * a.m[7]) + (copy.m[14] * a.m[11]) + (copy.m[15] * a.m[15]);
+  }
+
+  void Transpose()
+  {
+    auto swap = [](float& a, float& b)
+    {
+      float t = a;
+      a = b;
+      b = t;
+    };
+
+    swap(m[1], m[4]);
+    swap(m[2], m[8]);
+    swap(m[3], m[12]);
+    swap(m[6], m[9]);
+    swap(m[7], m[13]);
+    swap(m[11], m[14]);
+  }
 };
 
 struct Buffer
@@ -152,18 +252,24 @@ bool ReadBinaryFile(Buffer* file_contents, const char* path)
   return false;
 }
 
-static const float s_ClipSpaceTriangleVerts[] =
+struct Vertex
 {
-  0.0f, 1.0f, 0.0f, 1.0f,
-  1.0f, -1.0f, 0.0f, 1.0f,
-  -1.0f, -1.0f, 0.0f, 1.0f,
+  Vec3 position;
+  float color[4];
 };
 
-static const float s_ClipSpaceTriangleColors[] =
+static const Vertex s_ClipSpaceTriangleVertices[] =
 {
-  1.0f, 0.0f, 0.0f, 1.0f,
-  0.0f, 1.0f, 0.0f, 1.0f,
-  0.0f, 0.0f, 1.0f, 1.0f,
+  {{0.0f, 1.0f, 0.0f},  {1.0f, 0.0f, 0.0f, 1.0f}},
+  {{1.0f, -1.0f, 0.0f},  {0.0f, 1.0f, 0.0f, 1.0f}},
+  {{-1.0f, -1.0f, 0.0f},  {0.0f, 0.0f, 1.0f, 1.0f}},
+};
+
+struct CubeUniforms
+{
+  Mat4 obj_to_world;
+  Mat4 world_to_view;
+  Mat4 view_to_clip;
 };
 
 struct VulkanState
@@ -275,7 +381,6 @@ void VulkanState::CreateSwapchain(HINSTANCE hInstance)
   printf("\n");
   printf("Surface %#p supported: %s\n", surface, surface_supported == VK_TRUE ? "true" : "false");
   printf("\n");
-
 
   VK_CHECK(vkGetPhysicalDeviceSurfaceFormatsKHR(physical_device, surface, &surface_formats_count, nullptr)); // WTF, Intel needs this function call to get the count first... is this a bug?
   if (surface_formats_count > ARRAY_COUNT(surface_formats))
@@ -478,7 +583,7 @@ int main(int argc, char* argv[])
   VkBufferCreateInfo buffer_create_info = {};
   buffer_create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   buffer_create_info.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
-  buffer_create_info.size = sizeof(s_ClipSpaceTriangleVerts) + sizeof(s_ClipSpaceTriangleColors);
+  buffer_create_info.size = sizeof(CubeUniforms);
   buffer_create_info.queueFamilyIndexCount = 0;
   buffer_create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
   VkBuffer uniform_buffer = {};
@@ -506,19 +611,44 @@ int main(int argc, char* argv[])
   VkDeviceMemory uniform_device_memory = {};
   VK_CHECK(vkAllocateMemory(state.device, &alloc_info, &state.callbacks, &uniform_device_memory));
 
-  uint8_t* mapped_uniform_data = NULL;
+  CubeUniforms* mapped_uniform_data = NULL;
   VK_CHECK(vkMapMemory(state.device, uniform_device_memory, 0, memory_requirements.size, 0, (void**)&mapped_uniform_data));
-
-  memmove(mapped_uniform_data, s_ClipSpaceTriangleVerts, sizeof(s_ClipSpaceTriangleVerts));
-  memmove(mapped_uniform_data + sizeof(s_ClipSpaceTriangleVerts), s_ClipSpaceTriangleColors, sizeof(s_ClipSpaceTriangleColors));
+  // Need to copy stuff here.
   vkUnmapMemory(state.device, uniform_device_memory);
 
   VK_CHECK(vkBindBufferMemory(state.device, uniform_buffer, uniform_device_memory, 0));
 
+  buffer_create_info.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+  buffer_create_info.size = sizeof(s_ClipSpaceTriangleVertices);
+  VkBuffer vertex_buffer = {};
+  VK_CHECK(vkCreateBuffer(state.device, &buffer_create_info, &state.callbacks, &vertex_buffer));
+  vkGetBufferMemoryRequirements(state.device, vertex_buffer, &memory_requirements);
+  alloc_info.allocationSize = memory_requirements.size;
+
+  // This really needs to be function.
+  // Look for a memory type that matches what we're looking for.
+  for (uint32_t i = 0; i < state.memory_properties[0].memoryTypeCount; ++i)
+  {
+    if ((memory_requirements.memoryTypeBits & (1 << i)) && ((state.memory_properties[0].memoryTypes[i].propertyFlags & required_mask) == required_mask))
+    {
+      alloc_info.memoryTypeIndex = i;
+      break;
+    }
+  }
+
+  VkDeviceMemory vertex_buffer_device_memory = {};
+  VK_CHECK(vkAllocateMemory(state.device, &alloc_info, &state.callbacks, &vertex_buffer_device_memory));
+
+  Vertex* vertex_data = nullptr;
+  VK_CHECK(vkMapMemory(state.device, vertex_buffer_device_memory, 0, memory_requirements.size, 0, (void**)&vertex_data));
+  memmove(vertex_data, s_ClipSpaceTriangleVertices, sizeof(s_ClipSpaceTriangleVertices));
+  vkUnmapMemory(state.device, vertex_buffer_device_memory);
+  VK_CHECK(vkBindBufferMemory(state.device, vertex_buffer, vertex_buffer_device_memory, 0));
+
   VkDescriptorBufferInfo buffer_info = {};
   buffer_info.buffer = uniform_buffer;
   buffer_info.offset = 0;
-  buffer_info.range = sizeof(s_ClipSpaceTriangleVerts) + sizeof(s_ClipSpaceTriangleColors);
+  buffer_info.range = sizeof(CubeUniforms);
 
   VkDescriptorSetLayoutBinding layout_binding = {};
   layout_binding.binding = 0;
@@ -718,14 +848,27 @@ int main(int argc, char* argv[])
 // } VkPipelineVertexInputStateCreateInfo;
 
   VkVertexInputBindingDescription vi_binding = {};
+  vi_binding.binding = 1;
+  vi_binding.stride = sizeof(Vertex);
+  vi_binding.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
   VkVertexInputAttributeDescription vi_attribs[2] = {};
+  vi_attribs[0].location = 0;
+  vi_attribs[0].binding = 1;
+  vi_attribs[0].format = VK_FORMAT_R32G32B32_SFLOAT;
+  vi_attribs[0].offset = offsetof(Vertex, position);
+  vi_attribs[1].location = 1;
+  vi_attribs[1].binding = 1;
+  vi_attribs[1].format = VK_FORMAT_R32G32B32A32_SFLOAT;
+  vi_attribs[1].offset = offsetof(Vertex, color);
+
   VkPipelineVertexInputStateCreateInfo vi = {};
   vi.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
   vi.pNext = nullptr;
   vi.flags = 0;
-  vi.vertexBindingDescriptionCount = 0;
+  vi.vertexBindingDescriptionCount = 1;
   vi.pVertexBindingDescriptions = &vi_binding;
-  vi.vertexAttributeDescriptionCount = 0; // fix me
+  vi.vertexAttributeDescriptionCount = 2;
   vi.pVertexAttributeDescriptions = vi_attribs;
 
 // typedef struct VkPipelineInputAssemblyStateCreateInfo {
@@ -1129,6 +1272,7 @@ int main(int argc, char* argv[])
   vkCmdBeginRenderPass(draw_cmd[0], &rp_begin, VK_SUBPASS_CONTENTS_INLINE);
   vkCmdBindPipeline(draw_cmd[0], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
   vkCmdBindDescriptorSets(draw_cmd[0], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout, 0, 1, &desc_set, 0, nullptr);
+  vkCmdBindVertexBuffers(draw_cmd[0], 1, 1, &vertex_buffer, &offsets);
   vkCmdSetViewport(draw_cmd[0], 0, 1, &viewport);
   vkCmdSetScissor(draw_cmd[0], 0, 1, &scissor);
   vkCmdDraw(draw_cmd[0], 3, 1, 0, 0);
@@ -1140,6 +1284,7 @@ int main(int argc, char* argv[])
   vkCmdBeginRenderPass(draw_cmd[1], &rp_begin, VK_SUBPASS_CONTENTS_INLINE);
   vkCmdBindPipeline(draw_cmd[1], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
   vkCmdBindDescriptorSets(draw_cmd[1], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline_layout, 0, 1, &desc_set, 0, nullptr);
+  vkCmdBindVertexBuffers(draw_cmd[1], 1, 1, &vertex_buffer, &offsets);
   vkCmdSetViewport(draw_cmd[1], 0, 1, &viewport);
   vkCmdSetScissor(draw_cmd[1], 0, 1, &scissor);
   vkCmdDraw(draw_cmd[1], 3, 1, 0, 0);
@@ -1249,6 +1394,7 @@ int main(int argc, char* argv[])
   vkFreeMemory(state.device, uniform_device_memory, &state.callbacks);
   vkDestroyPipelineLayout(state.device, pipeline_layout, &state.callbacks);
   vkDestroyDescriptorSetLayout(state.device, desc_layout, &state.callbacks);
+  vkDestroyBuffer(state.device, vertex_buffer, &state.callbacks);
   vkDestroyBuffer(state.device, uniform_buffer, &state.callbacks);
   vkDestroyImageView(state.device, depth_image_view, &state.callbacks);
   vkFreeMemory(state.device, depth_buffer_memory, &state.callbacks);
