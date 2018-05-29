@@ -47,7 +47,7 @@ void VulkanInternalFreeNotify(void* userdata, size_t bytes, VkInternalAllocation
 {
 }
 
-#define VK_CHECK(vk_result)  do { VkResult result = (vk_result); if (result != VK_SUCCESS) { printf("%s:%d got %u!\n", __FILE__, __LINE__, result); getchar(); std::quick_exit(EXIT_FAILURE); } } while(0)
+#define VK_CHECK(vk_result)  do { VkResult result = (vk_result); if (result != VK_SUCCESS) { printf("%s:%d got %d!\n", __FILE__, __LINE__, result); getchar(); std::quick_exit(EXIT_FAILURE); } } while(0)
 #define ARRAY_COUNT(a)  (sizeof(a) / sizeof(a[0]))
 
 const char* const g_EnabledInstanceExtensions[] =
