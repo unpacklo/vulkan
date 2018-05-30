@@ -147,6 +147,17 @@ struct Vec3
     return this->Dot(*this);
   }
 
+  void Normalize()
+  {
+    *this = Normalized();
+  }
+
+  Vec3 Normalized() const
+  {
+    float length = Length();
+    return Vec3(x / length, y / length, z / length);
+  }
+
   Vec3 operator*(float s) const
   {
     return Vec3(s * x, s * y, s * z);
@@ -155,6 +166,17 @@ struct Vec3
   Vec3& operator*=(float s)
   {
     *this = (*this) * s;
+    return *this;
+  }
+
+  Vec3 operator/(float s) const
+  {
+    return Vec3(x / s, y / s, z / s);
+  }
+
+  Vec3& operator/=(float s)
+  {
+    *this = (*this) / s;
     return *this;
   }
 
@@ -207,6 +229,30 @@ struct Vec3
     FailIfNotExpected(Vec3(1.5f, 1.5f, 1.5f), a, __FUNCTION__);
   }
 
+  static void TestDivide()
+  {
+    FailIfNotExpected(Vec3(1.5f, 1.5f, 1.5f), Vec3(3.0f, 3.0f, 3.0f) / 2.0f, __FUNCTION__);
+  }
+
+  static void TestDivideAssign()
+  {
+    Vec3 a(3.0f, 3.0f, 3.0f);
+    a /= 2.0f;
+    FailIfNotExpected(Vec3(1.5f, 1.5f, 1.5f), a, __FUNCTION__);
+  }
+
+  static void TestNormalize()
+  {
+    Vec3 a(5.0f, 0.0f, 0.0f);
+    a.Normalize();
+    FailIfNotExpected(Vec3(1.0f, 0.0f, 0.0f), a, __FUNCTION__);
+  }
+
+  static void TestNormalized()
+  {
+    FailIfNotExpected(Vec3(1.0f, 0.0f, 0.0f), Vec3(5.0f, 0.0f, 0.0f).Normalized(), __FUNCTION__);
+  }
+
   static void RunAllTests()
   {
     Vec3::TestDot();
@@ -215,6 +261,10 @@ struct Vec3
     Vec3::TestLengthSquared();
     Vec3::TestMultiply();
     Vec3::TestMultiplyAssign();
+    Vec3::TestDivide();
+    Vec3::TestDivideAssign();
+    Vec3::TestNormalize();
+    Vec3::TestNormalized();
   }
 };
 
