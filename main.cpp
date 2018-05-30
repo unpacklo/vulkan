@@ -120,6 +120,10 @@ struct Vec3
   float y;
   float z;
 
+  Vec3()
+  {
+  }
+
   Vec3(float x, float y, float z)
     : x(x)
     , y(y)
@@ -268,9 +272,47 @@ struct Vec3
   }
 };
 
+struct Vec4
+{
+  float x;
+  float y;
+  float z;
+  float w;
+
+  Vec4()
+  {
+  }
+
+  Vec4(float x, float y, float z, float w)
+    : x(x)
+    , y(y)
+    , z(z)
+    , w(w)
+  {
+  }
+
+  Vec4(const Vec3& v, float w = 1.0f)
+    : x(v.x)
+    , y(v.y)
+    , z(v.z)
+    , w(w)
+  {
+  }
+
+  Vec3 ToVec3() const
+  {
+    return Vec3(x, y, z);
+  }
+};
+
 struct Mat4
 {
   float m[16];
+
+  void SetZero()
+  {
+    memset(this, 0, sizeof(*this));
+  }
 
   void SetIdentity()
   {
@@ -312,6 +354,13 @@ struct Mat4
     swap(m[11], m[14]);
   }
 
+  void SetPosition(const Vec3& position)
+  {
+    m[3] = position.x;
+    m[7] = position.y;
+    m[11] = position.z;
+  }
+
   Mat4 operator*(const Mat4& a) const
   {
     Mat4 result;
@@ -343,6 +392,18 @@ struct Mat4
   {
     *this = (*this) * a;
     return *this;
+  }
+
+  Vec4 operator*(const Vec4& v) const
+  {
+    Vec4 result;
+
+    result.x = (m[0] * v.x) + (m[1] * v.y) + (m[2] * v.z) + (m[3] * v.w);
+    result.y = (m[4] * v.x) + (m[5] * v.y) + (m[6] * v.z) + (m[7] * v.w);
+    result.z = (m[8] * v.x) + (m[9] * v.y) + (m[10] * v.z) + (m[11] * v.w);
+    result.w = (m[12] * v.x) + (m[13] * v.y) + (m[14] * v.z) + (m[15] * v.w);
+
+    return result;
   }
 
   // Tests.
@@ -388,11 +449,37 @@ struct Mat4
     FailIfNotExpected(expected, a, __FUNCTION__);
   }
 
+  static void TestSetPosition()
+  {
+    Mat4 a;
+    a.SetIdentity();
+    a.SetPosition(Vec3(1.0f, 2.0f, 3.0f));
+    const Mat4 expected = { 1.0f, 0.0f, 0.0f, 1.0f,
+                            0.0f, 1.0f, 0.0f, 2.0f,
+                            0.0f, 0.0f, 1.0f, 3.0f,
+                            0.0f, 0.0f, 0.0f, 1.0f };
+
+    FailIfNotExpected(expected, a, __FUNCTION__);
+  }
+
+  static void TestMultiplyVec4()
+  {
+    Vec4 v(0.0f, 0.0f, 0.0f, 1.0f);
+    Mat4 a;
+    a.SetIdentity();
+    a.SetPosition(Vec3(1.0f, 2.0f, 3.0f));
+    v = a * v;
+
+    FailIfNotExpected(Vec4(1.0f, 2.0f, 3.0f, 1.0f), v, __FUNCTION__);
+  }
+
   static void RunAllTests()
   {
-    Mat4::TestMultiply();
-    Mat4::TestTranspose();
-    Mat4::TestSetIdentity();
+    TestMultiply();
+    TestTranspose();
+    TestSetIdentity();
+    TestSetPosition();
+    TestMultiplyVec4();
   }
 };
 
