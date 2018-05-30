@@ -98,6 +98,22 @@ LRESULT CALLBACK WndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
   }
 }
 
+static void Fail(const char* function)
+{
+  printf("%s failed!\n", function);
+  getchar();
+  std::quick_exit(EXIT_FAILURE);
+}
+
+template <class T>
+static void FailIfNotExpected(const T& expected, const T& test, const char* function)
+{
+  if (memcmp(&expected, &test, sizeof(expected)))
+  {
+    Fail(function);
+  }
+}
+
 struct Vec3
 {
   float x;
@@ -130,6 +146,76 @@ struct Vec3
   {
     return this->Dot(*this);
   }
+
+  Vec3 operator*(float s) const
+  {
+    return Vec3(s * x, s * y, s * z);
+  }
+
+  Vec3& operator*=(float s)
+  {
+    *this = (*this) * s;
+    return *this;
+  }
+
+  // Tests.
+  static void TestDot()
+  {
+    Vec3 a(1.0f, 2.0f, 3.0f);
+    float dot = a.Dot(a);
+    float expected = 14.0f;
+
+    FailIfNotExpected(expected, dot, __FUNCTION__);
+  }
+
+  static void TestCross()
+  {
+    Vec3 a(1.0f, 0.0f, 0.0f);
+    Vec3 b(0.0f, 1.0f, 0.0f);
+    Vec3 cross = a.Cross(b);
+    Vec3 expected(0.0f, 0.0f, 1.0f);
+
+    FailIfNotExpected(expected, cross, __FUNCTION__);
+  }
+
+  static void TestLength()
+  {
+    FailIfNotExpected(1.0f, Vec3(1.0f, 0.0f, 0.0f).Length(), __FUNCTION__);
+    FailIfNotExpected(1.0f, Vec3(-1.0f, 0.0f, 0.0f).Length(), __FUNCTION__);
+    FailIfNotExpected(1.0f, Vec3(0.0f, 1.0f, 0.0f).Length(), __FUNCTION__);
+    FailIfNotExpected(1.0f, Vec3(0.0f, -1.0f, 0.0f).Length(), __FUNCTION__);
+    FailIfNotExpected(1.0f, Vec3(0.0f, 0.0f, 1.0f).Length(), __FUNCTION__);
+    FailIfNotExpected(1.0f, Vec3(0.0f, 0.0f, -1.0f).Length(), __FUNCTION__);
+  }
+
+  static void TestLengthSquared()
+  {
+    FailIfNotExpected(3.0f, Vec3(1.0f, 1.0f, 1.0f).LengthSquared(), __FUNCTION__);
+    FailIfNotExpected(3.0f, Vec3(-1.0f, -1.0f, -1.0f).LengthSquared(), __FUNCTION__);
+    FailIfNotExpected(14.0f, Vec3(1.0f, 2.0f, 3.0f).LengthSquared(), __FUNCTION__);
+  }
+
+  static void TestMultiply()
+  {
+    FailIfNotExpected(Vec3(1.5f, 1.5f, 1.5f), Vec3(3.0f, 3.0f, 3.0f) * 0.5f, __FUNCTION__);
+  }
+
+  static void TestMultiplyAssign()
+  {
+    Vec3 a(3.0f, 3.0f, 3.0f);
+    a *= 0.5f;
+    FailIfNotExpected(Vec3(1.5f, 1.5f, 1.5f), a, __FUNCTION__);
+  }
+
+  static void RunAllTests()
+  {
+    Vec3::TestDot();
+    Vec3::TestCross();
+    Vec3::TestLength();
+    Vec3::TestLengthSquared();
+    Vec3::TestMultiply();
+    Vec3::TestMultiplyAssign();
+  }
 };
 
 struct Mat4
@@ -159,31 +245,6 @@ struct Mat4
     m[15] = 1.0f;
   }
 
-  void Multiply(const Mat4& a)
-  {
-    Mat4 copy(*this);
-
-    m[0] = (copy.m[0] * a.m[0]) + (copy.m[1] * a.m[4]) + (copy.m[2] * a.m[8]) + (copy.m[3] * a.m[12]);
-    m[1] = (copy.m[0] * a.m[1]) + (copy.m[1] * a.m[5]) + (copy.m[2] * a.m[9]) + (copy.m[3] * a.m[13]);
-    m[2] = (copy.m[0] * a.m[2]) + (copy.m[1] * a.m[6]) + (copy.m[2] * a.m[10]) + (copy.m[3] * a.m[14]);
-    m[3] = (copy.m[0] * a.m[3]) + (copy.m[1] * a.m[7]) + (copy.m[2] * a.m[11]) + (copy.m[3] * a.m[15]);
-
-    m[4] = (copy.m[4] * a.m[0]) + (copy.m[5] * a.m[4]) + (copy.m[6] * a.m[8]) + (copy.m[7] * a.m[12]);
-    m[5] = (copy.m[4] * a.m[1]) + (copy.m[5] * a.m[5]) + (copy.m[6] * a.m[9]) + (copy.m[7] * a.m[13]);
-    m[6] = (copy.m[4] * a.m[2]) + (copy.m[5] * a.m[6]) + (copy.m[6] * a.m[10]) + (copy.m[7] * a.m[14]);
-    m[7] = (copy.m[4] * a.m[3]) + (copy.m[5] * a.m[7]) + (copy.m[6] * a.m[11]) + (copy.m[7] * a.m[15]);
-
-    m[8] = (copy.m[8] * a.m[0]) + (copy.m[9] * a.m[4]) + (copy.m[10] * a.m[8]) + (copy.m[11] * a.m[12]);
-    m[9] = (copy.m[8] * a.m[1]) + (copy.m[9] * a.m[5]) + (copy.m[10] * a.m[9]) + (copy.m[11] * a.m[13]);
-    m[10] = (copy.m[8] * a.m[2]) + (copy.m[9] * a.m[6]) + (copy.m[10] * a.m[10]) + (copy.m[11] * a.m[14]);
-    m[11] = (copy.m[8] * a.m[3]) + (copy.m[9] * a.m[7]) + (copy.m[10] * a.m[11]) + (copy.m[11] * a.m[15]);
-
-    m[12] = (copy.m[12] * a.m[0]) + (copy.m[13] * a.m[4]) + (copy.m[14] * a.m[8]) + (copy.m[15] * a.m[12]);
-    m[13] = (copy.m[12] * a.m[1]) + (copy.m[13] * a.m[5]) + (copy.m[14] * a.m[9]) + (copy.m[15] * a.m[13]);
-    m[14] = (copy.m[12] * a.m[2]) + (copy.m[13] * a.m[6]) + (copy.m[14] * a.m[10]) + (copy.m[15] * a.m[14]);
-    m[15] = (copy.m[12] * a.m[3]) + (copy.m[13] * a.m[7]) + (copy.m[14] * a.m[11]) + (copy.m[15] * a.m[15]);
-  }
-
   void Transpose()
   {
     auto swap = [](float& a, float& b)
@@ -199,6 +260,89 @@ struct Mat4
     swap(m[6], m[9]);
     swap(m[7], m[13]);
     swap(m[11], m[14]);
+  }
+
+  Mat4 operator*(const Mat4& a) const
+  {
+    Mat4 result;
+
+    result.m[0] = (m[0] * a.m[0]) + (m[1] * a.m[4]) + (m[2] * a.m[8]) + (m[3] * a.m[12]);
+    result.m[1] = (m[0] * a.m[1]) + (m[1] * a.m[5]) + (m[2] * a.m[9]) + (m[3] * a.m[13]);
+    result.m[2] = (m[0] * a.m[2]) + (m[1] * a.m[6]) + (m[2] * a.m[10]) + (m[3] * a.m[14]);
+    result.m[3] = (m[0] * a.m[3]) + (m[1] * a.m[7]) + (m[2] * a.m[11]) + (m[3] * a.m[15]);
+
+    result.m[4] = (m[4] * a.m[0]) + (m[5] * a.m[4]) + (m[6] * a.m[8]) + (m[7] * a.m[12]);
+    result.m[5] = (m[4] * a.m[1]) + (m[5] * a.m[5]) + (m[6] * a.m[9]) + (m[7] * a.m[13]);
+    result.m[6] = (m[4] * a.m[2]) + (m[5] * a.m[6]) + (m[6] * a.m[10]) + (m[7] * a.m[14]);
+    result.m[7] = (m[4] * a.m[3]) + (m[5] * a.m[7]) + (m[6] * a.m[11]) + (m[7] * a.m[15]);
+
+    result.m[8] = (m[8] * a.m[0]) + (m[9] * a.m[4]) + (m[10] * a.m[8]) + (m[11] * a.m[12]);
+    result.m[9] = (m[8] * a.m[1]) + (m[9] * a.m[5]) + (m[10] * a.m[9]) + (m[11] * a.m[13]);
+    result.m[10] = (m[8] * a.m[2]) + (m[9] * a.m[6]) + (m[10] * a.m[10]) + (m[11] * a.m[14]);
+    result.m[11] = (m[8] * a.m[3]) + (m[9] * a.m[7]) + (m[10] * a.m[11]) + (m[11] * a.m[15]);
+
+    result.m[12] = (m[12] * a.m[0]) + (m[13] * a.m[4]) + (m[14] * a.m[8]) + (m[15] * a.m[12]);
+    result.m[13] = (m[12] * a.m[1]) + (m[13] * a.m[5]) + (m[14] * a.m[9]) + (m[15] * a.m[13]);
+    result.m[14] = (m[12] * a.m[2]) + (m[13] * a.m[6]) + (m[14] * a.m[10]) + (m[15] * a.m[14]);
+    result.m[15] = (m[12] * a.m[3]) + (m[13] * a.m[7]) + (m[14] * a.m[11]) + (m[15] * a.m[15]);
+
+    return result;
+  }
+
+  Mat4& operator*=(const Mat4& a)
+  {
+    *this = (*this) * a;
+    return *this;
+  }
+
+  // Tests.
+  static void TestMultiply()
+  {
+    Mat4 a = { 1.0f, 2.0f, 3.0f, 4.0f,
+               5.0f, 6.0f, 7.0f, 8.0f,
+               9.0f, 10.0f, 11.0f, 12.0f,
+               13.0f, 14.0f, 15.0f, 16.0f };
+    Mat4 b = a;
+    Mat4 c = a * b;
+    const Mat4 expected = { 90.0f, 100.0f, 110.0f, 120.0f,
+                            202.0f, 228.0f, 254.0f, 280.0f,
+                            314.0f, 356.0f, 398.0f, 440.0f,
+                            426.0f, 484.0f, 542.0f, 600.0f };
+
+    FailIfNotExpected(expected, c, __FUNCTION__);
+  }
+
+  static void TestTranspose()
+  {
+    Mat4 a = { 1.0f, 2.0f, 3.0f, 4.0f,
+               5.0f, 6.0f, 7.0f, 8.0f,
+               9.0f, 10.0f, 11.0f, 12.0f,
+               13.0f, 14.0f, 15.0f, 16.0f };
+    const Mat4 expected = { 1.0f, 5.0f, 9.0f, 13.0f,
+                            2.0f, 6.0f, 10.0f, 14.0f,
+                            3.0f, 7.0f, 11.0f, 15.0f,
+                            4.0f, 8.0f, 12.0f, 16.0f };
+    a.Transpose();
+    FailIfNotExpected(expected, a, __FUNCTION__);
+  }
+
+  static void TestSetIdentity()
+  {
+    Mat4 a;
+    a.SetIdentity();
+    const Mat4 expected = { 1.0f, 0.0f, 0.0f, 0.0f,
+                            0.0f, 1.0f, 0.0f, 0.0f,
+                            0.0f, 0.0f, 1.0f, 0.0f,
+                            0.0f, 0.0f, 0.0f, 1.0f };
+
+    FailIfNotExpected(expected, a, __FUNCTION__);
+  }
+
+  static void RunAllTests()
+  {
+    Mat4::TestMultiply();
+    Mat4::TestTranspose();
+    Mat4::TestSetIdentity();
   }
 };
 
@@ -267,9 +411,9 @@ static const Vertex s_ClipSpaceTriangleVertices[] =
 
 struct CubeUniforms
 {
-  Mat4 obj_to_world;
-  Mat4 world_to_view;
-  Mat4 view_to_clip;
+  Mat4 world_from_obj;
+  Mat4 view_from_world;
+  Mat4 clip_from_view;
 };
 
 struct VulkanState
@@ -463,6 +607,9 @@ void VulkanState::CreateSwapchain(HINSTANCE hInstance)
 
 int main(int argc, char* argv[])
 {
+  Vec3::RunAllTests();
+  Mat4::RunAllTests();
+
   printf("Vulkan header version: %u\n", VK_HEADER_VERSION);
   int width = 1280;
   int height = 720;
@@ -1391,6 +1538,7 @@ int main(int argc, char* argv[])
   vkDestroyRenderPass(state.device, render_pass, &state.callbacks);
   vkDestroyFence(state.device, submit_fence, &state.callbacks);
   vkDestroySemaphore(state.device, img_acq_sem, &state.callbacks);
+  vkFreeMemory(state.device, vertex_buffer_device_memory, &state.callbacks);
   vkFreeMemory(state.device, uniform_device_memory, &state.callbacks);
   vkDestroyPipelineLayout(state.device, pipeline_layout, &state.callbacks);
   vkDestroyDescriptorSetLayout(state.device, desc_layout, &state.callbacks);
